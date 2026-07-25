@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "grc-deploy",
+  "outputfilename": "grc-deploy",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "RnGlobal1899",
+    "email": "rnglobal1899@gmail.com"
+  }
+}
