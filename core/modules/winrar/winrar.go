@@ -45,7 +45,7 @@ func (i *Installer) Download(wg *sync.WaitGroup) {
 func (i *Installer) Install() {
 	logger.LogStep("Instalando RARLab.WinRAR (Tentativa 1: Winget)...")
 
-	exitCode, err := executor.RunSilent("winget.exe", "install", "--id", "RARLab.WinRAR", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	exitCode, err := executor.RunSilent("winget.exe", "install", "--id", "RARLab.WinRAR", "--exact", "--silent", "--disable-interactivity", "--accept-package-agreements", "--accept-source-agreements")
 	if err == nil && exitCode == 0 {
 		logger.LogSuccess("WinRAR instalado com sucesso via Winget.")
 		report.AddDeployReport("Utilitários", "RARLab.WinRAR", "Sucesso", "Instalado via Winget")
