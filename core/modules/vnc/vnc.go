@@ -5,7 +5,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"grc-deploy/core/downloader"
 	"grc-deploy/core/executor"
@@ -20,31 +22,87 @@ const (
 )
 
 type Installer struct {
-	TempDir     string
-	VncExePath  string
-	VncIniPath  string
-	VncInfPath  string
-	InstallPath string
-	WinvncExe   string
+	TempDir       string
+	VncExePath    string
+	VncIniPath    string
+	VncInfPath    string
+	InstallPath   string
+	WinvncExe     string
+	Uninstaller   string
+	BaseVncFolder string
 }
 
 func New(tempDir string) *Installer {
-	installPath := filepath.Join(os.Getenv("ProgramFiles"), "uvnc bvba", "UltraVNC")
+	baseVncFolder := filepath.Join(os.Getenv("ProgramFiles"), "uvnc bvba")
+	installPath := filepath.Join(baseVncFolder, "UltraVNC")
+
 	return &Installer{
-		TempDir:     tempDir,
-		VncExePath:  filepath.Join(tempDir, "UltraVNC", "UltraVNC_Setup.exe"),
-		VncIniPath:  filepath.Join(tempDir, "UltraVNC", "ultravnc.ini"),
-		VncInfPath:  filepath.Join(tempDir, "UltraVNC", "ultravnc.inf"),
-		InstallPath: installPath,
-		WinvncExe:   filepath.Join(installPath, "winvnc.exe"),
+		TempDir:       tempDir,
+		VncExePath:    filepath.Join(tempDir, "UltraVNC", "UltraVNC_Setup.exe"),
+		VncIniPath:    filepath.Join(tempDir, "UltraVNC", "ultravnc.ini"),
+		VncInfPath:    filepath.Join(tempDir, "UltraVNC", "ultravnc.inf"),
+		InstallPath:   installPath,
+		WinvncExe:     filepath.Join(installPath, "winvnc.exe"),
+		Uninstaller:   filepath.Join(installPath, "unins000.exe"),
+		BaseVncFolder: baseVncFolder,
 	}
+}
+
+// Verifica se o UltraVNC já está instalado
+func (i *Installer) IsInstalled() bool {
+	_, err := os.Stat(i.WinvncExe)
+	return err == nil
+}
+
+// Desinstala o UltraVNC completamente, incluindo serviço, registro e arquivos residuais
+func (i *Installer) Uninstall() {
+	logger.LogStep("Executando Clean Nuke do UltraVNC...")
+
+	// 1. Mata o processo do Tray Icon para liberar o executável
+	executor.RunSilent("taskkill", "/F", "/IM", "winvnc.exe")
+	time.Sleep(1 * time.Second)
+
+	// 2. Remove a persistência do ícone no Registro customizado
+	executor.RunSilent("reg", "delete", `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`, "/v", "UltraVNC", "/f")
+
+	// 3. Executa o desinstalador oficial silenciosamente
+	if _, err := os.Stat(i.Uninstaller); err == nil {
+		logger.WriteLog("Invocando desinstalador oficial...", "INFO", logger.Cyan)
+		executor.RunSilent(i.Uninstaller, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
+		time.Sleep(2 * time.Second)
+	}
+
+	// 4. Erradica a pasta (Lida com o ultravnc.ini órfão que bloqueia exclusão nativa)
+	if _, err := os.Stat(i.BaseVncFolder); err == nil {
+		logger.WriteLog("Removendo ultravnc.ini e pastas residuais...", "INFO", logger.Cyan)
+		os.RemoveAll(i.BaseVncFolder)
+	}
+
+	logger.LogSuccess("UltraVNC removido completamente do sistema.")
+	report.AddDeployReport("UltraVNC", "Desinstalação", report.StatusSucesso, "Clean Nuke executado")
+}
+
+// Faz a checagem de segurança do conteúdo do arquivo baixado
+func (i *Installer) ValidateINI() bool {
+	file, err := os.Open(i.VncIniPath)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	// Lê apenas o 1º KB para máxima eficiência de memória (equivalente ao Get-Content -TotalCount 15)
+	buffer := make([]byte, 1024)
+	n, _ := file.Read(buffer)
+	content := strings.ToLower(string(buffer[:n]))
+
+	return strings.Contains(content, "[admin]") || strings.Contains(content, "passwd")
 }
 
 func (i *Installer) Download(wg *sync.WaitGroup) {
 	defer wg.Done()
 	logger.WriteLog("Iniciando download do UltraVNC e dependências...", "INFO", logger.Cyan)
 
-	if _, err := os.Stat(i.WinvncExe); err == nil {
+	if i.IsInstalled() {
 		logger.LogWarning("UltraVNC já está instalado. Pulando fase de rede.")
 		return
 	}
@@ -58,16 +116,22 @@ func (i *Installer) Download(wg *sync.WaitGroup) {
 		{URL: infUrl, Destination: i.VncInfPath, Label: "Arquivo de Resposta (ultravnc.inf)", ExpectedMB: 0, MagicType: "Nenhum"},
 	}
 
-	// Executa os downloads em paralelo e registra falhas, mas não interrompe o fluxo
 	if err := downloader.DownloadsParalelos(fila); err != nil {
 		logger.WriteLog("Falha no download dos recursos do VNC.", "ERROR", logger.Red)
+	}
+
+	// Validação de integridade do arquivo de configuração recém-baixado
+	if i.ValidateINI() {
+		logger.LogSuccess("Conteúdo do ultravnc.ini validado com sucesso.")
+	} else {
+		logger.LogWarning("O arquivo ultravnc.ini baixado não possui a estrutura padrão do VNC.")
 	}
 }
 
 func (i *Installer) Install() {
 	logger.LogStep("Iniciando Módulo: UltraVNC Installer (Ponto Zero)")
 
-	if _, err := os.Stat(i.WinvncExe); err == nil {
+	if i.IsInstalled() {
 		logger.LogWarning("O UltraVNC já está instalado nesta máquina.")
 		report.AddDeployReport("UltraVNC", "Instalação", report.StatusAviso, "Ignorado (Já estava instalado)")
 		return
@@ -102,11 +166,16 @@ func (i *Installer) Install() {
 	logger.LogSuccess("Instalação base concluída e serviço registrado pelo desinstalador.")
 	logger.LogStep("Ativando serviço e persistência do ícone...")
 
-	if _, err := os.Stat(i.WinvncExe); err == nil {
+	if i.IsInstalled() {
+		// Inicia o serviço do UltraVNC e adiciona a persistência do ícone no registro
 		executor.RunSilent("sc", "start", "uvnc_service")
 
 		regArgs := []string{"add", `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`, "/v", "UltraVNC", "/t", "REG_SZ", "/d", fmt.Sprintf(`"%s" -service_run`, i.WinvncExe), "/f"}
 		executor.RunSilent("reg", regArgs...)
+
+		// Limpa instâncias residuais na sessão do usuário antes de disparar a nova para evitar mensagens de conflito
+		executor.RunSilent("taskkill", "/F", "/IM", "winvnc.exe")
+		time.Sleep(1 * time.Second)
 
 		executor.RunAsync(i.WinvncExe, "-service_run")
 

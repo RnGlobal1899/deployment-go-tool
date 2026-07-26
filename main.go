@@ -33,6 +33,22 @@ func main() {
 	logger.LogStep("Iniciando Módulos...")
 
 	vncInst := vnc.New(tempDir)
+
+	// --- BLOCO INTERATIVO DE TESTE (HOMOLOGAÇÃO VNC) ---
+	if vncInst.IsInstalled() {
+		logger.LogWarning("UltraVNC detectado no sistema.")
+		fmt.Print("  Deseja testar o Clean Nuke (Desinstalação) agora? [s/n]: ")
+		var resp string
+		fmt.Scanln(&resp)
+
+		if resp == "s" || resp == "S" {
+			vncInst.Uninstall()
+			logger.LogSuccess("Teste de desinstalação concluído. Valide o diretório e o registro.")
+			os.Exit(0) // Interrompe a esteira para você fazer a validação manual
+		}
+	}
+	// ---------------------------------------------------
+
 	chromeInst := chrome.New(tempDir)
 	firefoxInst := firefox.New(tempDir)
 	anydeskInst := anydesk.New(tempDir)
