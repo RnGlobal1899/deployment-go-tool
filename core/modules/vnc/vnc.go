@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"grc-deploy/core/downloader"
 	"grc-deploy/core/executor"
@@ -18,82 +19,104 @@ const (
 	infUrl = "https://www.dropbox.com/scl/fi/bmdeurmb3o4rjf8dnhg0b/ultravnc.inf?rlkey=cu4tfnycbzkq1zkyi89431a2v&st=vyb4pwb0&dl=1"
 )
 
-// Deploy executa a esteira de provisionamento específica do UltraVNC
-func Deploy(tempFolder string) {
-	logger.LogStep("Iniciando Módulo: UltraVNC Installer (Ponto Zero)")
-	logger.WriteLog("Módulo UltraVNC iniciado pelo Master Deploy (Go).", "INFO", logger.Cyan)
+type Installer struct {
+	TempDir     string
+	VncExePath  string
+	VncIniPath  string
+	VncInfPath  string
+	InstallPath string
+	WinvncExe   string
+}
 
+func New(tempDir string) *Installer {
 	installPath := filepath.Join(os.Getenv("ProgramFiles"), "uvnc bvba", "UltraVNC")
-	winvncExe := filepath.Join(installPath, "winvnc.exe")
+	return &Installer{
+		TempDir:     tempDir,
+		VncExePath:  filepath.Join(tempDir, "UltraVNC", "UltraVNC_Setup.exe"),
+		VncIniPath:  filepath.Join(tempDir, "UltraVNC", "ultravnc.ini"),
+		VncInfPath:  filepath.Join(tempDir, "UltraVNC", "ultravnc.inf"),
+		InstallPath: installPath,
+		WinvncExe:   filepath.Join(installPath, "winvnc.exe"),
+	}
+}
 
-	// Verificação de Instalação Existente
-	if _, err := os.Stat(winvncExe); err == nil {
+func (i *Installer) Download(wg *sync.WaitGroup) {
+	defer wg.Done()
+	logger.WriteLog("Iniciando download do UltraVNC e dependências...", "INFO", logger.Cyan)
+
+	if _, err := os.Stat(i.WinvncExe); err == nil {
+		logger.LogWarning("UltraVNC já está instalado. Pulando fase de rede.")
+		return
+	}
+
+	vncTempDir := filepath.Join(i.TempDir, "UltraVNC")
+	os.MkdirAll(vncTempDir, os.ModePerm)
+
+	fila := []downloader.DownloadItem{
+		{URL: vncUrl, Destination: i.VncExePath, Label: "Instalador UltraVNC", ExpectedMB: 1.0, MagicType: "EXE"},
+		{URL: iniUrl, Destination: i.VncIniPath, Label: "Arquivo de Conf (ultravnc.ini)", ExpectedMB: 0, MagicType: "Nenhum"},
+		{URL: infUrl, Destination: i.VncInfPath, Label: "Arquivo de Resposta (ultravnc.inf)", ExpectedMB: 0, MagicType: "Nenhum"},
+	}
+
+	// Executa os downloads em paralelo e registra falhas, mas não interrompe o fluxo
+	if err := downloader.DownloadsParalelos(fila); err != nil {
+		logger.WriteLog("Falha no download dos recursos do VNC.", "ERROR", logger.Red)
+	}
+}
+
+func (i *Installer) Install() {
+	logger.LogStep("Iniciando Módulo: UltraVNC Installer (Ponto Zero)")
+
+	if _, err := os.Stat(i.WinvncExe); err == nil {
 		logger.LogWarning("O UltraVNC já está instalado nesta máquina.")
-		logger.WriteLog("UltraVNC detectado. Instalação ignorada na automação Go.", "INFO", logger.Cyan)
 		report.AddDeployReport("UltraVNC", "Instalação", report.StatusAviso, "Ignorado (Já estava instalado)")
 		return
 	}
 
-	// Preparação do Ambiente
-	vncTempDir := filepath.Join(tempFolder, "UltraVNC")
-	vncExePath := filepath.Join(vncTempDir, "UltraVNC_Setup.exe")
-	vncIniPath := filepath.Join(vncTempDir, "ultravnc.ini")
-	vncInfPath := filepath.Join(vncTempDir, "ultravnc.inf")
-
-	fila := []downloader.DownloadItem{
-		{URL: vncUrl, Destination: vncExePath, Label: "Instalador UltraVNC", ExpectedMB: 1.0, MagicType: "EXE"},
-		{URL: iniUrl, Destination: vncIniPath, Label: "Arquivo de Conf (ultravnc.ini)", ExpectedMB: 0, MagicType: "Nenhum"},
-		{URL: infUrl, Destination: vncInfPath, Label: "Arquivo de Resposta (ultravnc.inf)", ExpectedMB: 0, MagicType: "Nenhum"},
-	}
-
-	// Execução Paralela da Fase de Rede
-	if err := downloader.DownloadsParalelos(fila); err != nil {
-		logger.WriteLog("Falha no download dos recursos do VNC. Módulo abortado.", "ERROR", logger.Red)
-		report.AddDeployReport("UltraVNC", "Download", report.StatusFalha, "Erro ao baixar arquivos dependentes")
+	if _, err := os.Stat(i.VncExePath); os.IsNotExist(err) {
+		logger.WriteLog("Instalador do VNC não encontrado. Abortando instalação.", "ERROR", logger.Red)
+		report.AddDeployReport("UltraVNC", "Instalação", report.StatusFalha, "Download não concluído")
 		return
 	}
 
-	// Injeção Prévia do .ini no diretório de instalação antes do setup
 	logger.LogStep("Preparando ambiente e executando instalação silenciosa...")
-	os.MkdirAll(installPath, os.ModePerm)
-	copyFile(vncIniPath, filepath.Join(installPath, "ultravnc.ini"))
+	os.MkdirAll(i.InstallPath, os.ModePerm)
+	copyFile(i.VncIniPath, filepath.Join(i.InstallPath, "ultravnc.ini"))
 	logger.LogStep("Arquivo ultravnc.ini pré-injetado com sucesso.")
 
-	// Instalação Sequencial Estrita
 	installArgs := []string{
 		"/VERYSILENT",
-		fmt.Sprintf(`/LOADINF=%s`, vncInfPath),
+		fmt.Sprintf(`/LOADINF=%s`, i.VncInfPath),
 		`/TASKS=installservice`,
 		"/NORESTART",
 	}
 
-	exitCode, err := executor.RunSilent(vncExePath, installArgs...)
+	exitCode, err := executor.RunSilent(i.VncExePath, installArgs...)
 	if err != nil && exitCode != 0 && exitCode != 3010 {
 		logger.LogWarning(fmt.Sprintf("Instalador retornou erro: %d", exitCode))
-		logger.WriteLog("Falha na instalacao do UltraVNC.", "ERROR", logger.Red)
+		logger.WriteLog("Falha na instalação do UltraVNC.", "ERROR", logger.Red)
 		report.AddDeployReport("UltraVNC", "Instalação", report.StatusFalha, fmt.Sprintf("ExitCode %d", exitCode))
 		return
 	}
 
 	logger.LogSuccess("Instalação base concluída e serviço registrado pelo desinstalador.")
-
-	// Ativação do Serviço e Persistência
 	logger.LogStep("Ativando serviço e persistência do ícone...")
-	if _, err := os.Stat(winvncExe); err == nil {
-		// Inicia serviço
+
+	if _, err := os.Stat(i.WinvncExe); err == nil {
 		executor.RunSilent("sc", "start", "uvnc_service")
 
-		// Registro via comando nativo para persistência do Tray Icon
-		regArgs := []string{"add", `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`, "/v", "UltraVNC", "/t", "REG_SZ", "/d", fmt.Sprintf(`"%s" -service_run`, winvncExe), "/f"}
+		regArgs := []string{"add", `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`, "/v", "UltraVNC", "/t", "REG_SZ", "/d", fmt.Sprintf(`"%s" -service_run`, i.WinvncExe), "/f"}
 		executor.RunSilent("reg", regArgs...)
 
-		// Inicia o processo Tray Icon na sessão do usuário atual
-		executor.RunAsync(winvncExe, "-service_run")
+		executor.RunAsync(i.WinvncExe, "-service_run")
 
 		logger.LogSuccess("UltraVNC configurado, Serviço operando e Ícone ativado.")
 		logger.WriteLog("UltraVNC instalado via INF, INI injetado e TrayIcon ativado.", "SUCCESS", logger.Green)
 		report.AddDeployReport("UltraVNC", "Provisionamento", report.StatusSucesso, "Instalado, Serviço nativo e Ícone OK")
 	}
+
+	// Limpeza dos instaladores para o Zero Touch
+	os.RemoveAll(filepath.Join(i.TempDir, "UltraVNC"))
 }
 
 // Função auxiliar simples para a injeção do .ini
