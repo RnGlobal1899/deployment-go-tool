@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"grc-deploy/core/downloader"
 	"grc-deploy/core/logger"
+	"grc-deploy/core/modules/vnc"
 	"grc-deploy/core/report"
 
 	"github.com/wailsapp/wails/v2"
@@ -19,32 +19,13 @@ var assets embed.FS
 
 func main() {
 
-	fmt.Println(">> Iniciando download via CLI")
+	fmt.Println(">> Iniciando teste de software via terminal")
 
 	// Inicializa o sistema de logs e ponteiros
 	logger.InitLogger("C:\\TI_Setup_Temp")
-	logger.WriteLog("Sessão de teste de integração iniciada.", "INFO", logger.Cyan)
+	logger.WriteLog("Sessão de teste VNC iniciada...", "INFO", logger.Cyan)
 
-	fila := []downloader.DownloadItem{
-		{
-			URL:         "https://download.anydesk.com/AnyDesk.exe",
-			Destination: "C:\\TI_Setup_Temp\\Teste_Go\\AnyDesk.exe",
-			Label:       "AnyDesk",
-			ExpectedMB:  3.0,
-			MagicType:   "EXE",
-		},
-		{
-			URL:         "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=pt-BR",
-			Destination: "C:\\TI_Setup_Temp\\Teste_Go\\Firefox.exe",
-			Label:       "Firefox",
-			ExpectedMB:  50.0,
-			MagicType:   "EXE",
-		},
-	}
-
-	if err := downloader.DownloadsParalelos(fila); err != nil {
-		logger.WriteLog(fmt.Sprintf("Teste apresentou falhas: %v", err), "ERROR", logger.Red)
-	}
+	vnc.Deploy("C:\\TI_Setup_Temp")
 
 	fmt.Println("\n  ============================================================")
 	fmt.Println("  >> RELATÓRIO DE DEPLOY GERADO EM MEMÓRIA <<")
