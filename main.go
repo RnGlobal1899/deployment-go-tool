@@ -24,46 +24,43 @@ var assets embed.FS
 
 func main() {
 
-	fmt.Println(">> Iniciando teste de software via terminal")
-
 	// Inicializa o sistema de logs e ponteiros
 	logger.InitLogger("C:\\TI_Setup_Temp")
-	logger.WriteLog("Sessão de teste VNC iniciada...", "INFO", logger.Cyan)
-
 	tempDir := "C:\\TI_Setup_Temp"
-	vnc.Deploy(tempDir)
+	logger.WriteLog("Iniciando sessão de teste", "INFO", logger.Cyan)
 
 	// --- MÓDULO UTILITÁRIOS ESSENCIAIS ---
-	logger.LogStep("Iniciando Módulo de Utilitários Essenciais...")
+	logger.LogStep("Iniciando Módulos...")
 
+	vncInst := vnc.New(tempDir)
 	chromeInst := chrome.New(tempDir)
 	firefoxInst := firefox.New(tempDir)
 	anydeskInst := anydesk.New(tempDir)
 	winrarInst := winrar.New(tempDir)
 
-	// FASE DE REDE: Concorrência massiva via WaitGroup
+	// Downloads paralelos via WaitGroup
 	logger.LogStep("Iniciando fase assíncrona (Downloads Paralelos)...")
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(5)
 
+	go vncInst.Download(&wg)
 	go chromeInst.Download(&wg)
 	go firefoxInst.Download(&wg)
 	go anydeskInst.Download(&wg)
-	go winrarInst.Download(&wg) // O fallback já é baixado por prevenção
+	go winrarInst.Download(&wg)
 
 	wg.Wait()
 	logger.LogSuccess("Fase de Rede concluída.")
 
-	// FASE DE INSTALAÇÃO: Estritamente Sequencial (Respeitando o bloqueio do Windows Installer/MSI)
+	// Instalaçãoo sequencial
 	logger.LogStep("Iniciando fase de instalação sequencial (Zero Touch)...")
+	vncInst.Install()
 	chromeInst.Install()
 	firefoxInst.Install()
 	anydeskInst.Install()
 	winrarInst.Install()
 
 	logger.LogSuccess("Módulo Utilitários Essenciais finalizado com sucesso.")
-
-	os.Exit(0)
 
 	fmt.Println("\n  ============================================================")
 	fmt.Println("  >> RELATÓRIO DE DEPLOY GERADO EM MEMÓRIA <<")
