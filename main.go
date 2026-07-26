@@ -3,8 +3,11 @@ package main
 import (
 	"embed"
 	"fmt"
-	"grc-deploy/core/downloader"
 	"os"
+
+	"grc-deploy/core/downloader"
+	"grc-deploy/core/logger"
+	"grc-deploy/core/report"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -17,6 +20,10 @@ var assets embed.FS
 func main() {
 
 	fmt.Println(">> Iniciando download via CLI")
+
+	// Inicializa o sistema de logs e ponteiros
+	logger.InitLogger("C:\\TI_Setup_Temp")
+	logger.WriteLog("Sessão de teste de integração iniciada.", "INFO", logger.Cyan)
 
 	fila := []downloader.DownloadItem{
 		{
@@ -36,11 +43,18 @@ func main() {
 	}
 
 	if err := downloader.DownloadsParalelos(fila); err != nil {
-		fmt.Printf("Erro ao realizar downloads: %v\n", err)
-	} else {
-		fmt.Println("Downloads concluídos com sucesso! Bloqueando start do Wails")
-		os.Exit(1)
+		logger.WriteLog(fmt.Sprintf("Teste apresentou falhas: %v", err), "ERROR", logger.Red)
 	}
+
+	fmt.Println("\n  ============================================================")
+	fmt.Println("  >> RELATÓRIO DE DEPLOY GERADO EM MEMÓRIA <<")
+	for _, item := range report.GetReport() {
+		fmt.Printf("  [%s] %s — %s: %s\n", item.Status, item.Componente, item.Tarefa, item.Detalhes)
+	}
+	fmt.Println("  ============================================================")
+
+	fmt.Println("\n>> TESTE CONCLUÍDO. BLOQUEANDO START DO WAILS <<")
+	os.Exit(0)
 
 	// Create an instance of the app structure
 	app := NewApp()

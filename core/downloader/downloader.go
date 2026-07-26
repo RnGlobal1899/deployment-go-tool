@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"grc-deploy/core/logger"
+	"grc-deploy/core/report"
 )
 
 // Constantes dos Magic Bytes para validação de arquivos
@@ -72,7 +75,8 @@ func validarMagicBytes(filePath, magicType string) error {
 func downloadWorker(item DownloadItem, wg *sync.WaitGroup, results chan<- Result) {
 	defer wg.Done()
 
-	fmt.Printf("Iniciando download: %s...\n", item.Label)
+	logger.LogStep(fmt.Sprintf("Baixando %s...", item.Label))
+	logger.WriteLog(fmt.Sprintf("Iniciando download concorrente: %s -> %s", item.Label, item.URL), "INFO", logger.Cyan)
 
 	// Cria os diretórios de destino caso não existam
 	if err := os.MkdirAll(filepath.Dir(item.Destination), 0755); err != nil {
@@ -126,7 +130,11 @@ func downloadWorker(item DownloadItem, wg *sync.WaitGroup, results chan<- Result
 		return
 	}
 
-	fmt.Printf("Download concluído e validado: %s (%.2f MB)\n", item.Label, sizeMB)
+	logger.LogSuccess(fmt.Sprintf("%s baixado e validado com sucesso (%.2f MB).", item.Label, sizeMB))
+	logger.WriteLog(fmt.Sprintf("Download OK: %s (%.2f MB) -> %s", item.Label, sizeMB, item.Destination), "SUCCESS", logger.Green)
+	report.AddDeployReport("Motor de Download", item.Label, report.StatusSucesso, "Download e validação (Magic Bytes) concluídos")
+
+	results <- Result{Label: item.Label, Error: nil}
 }
 
 func DownloadsParalelos(items []DownloadItem) error {
@@ -144,7 +152,8 @@ func DownloadsParalelos(items []DownloadItem) error {
 	hasError := false
 	for res := range results {
 		if res.Error != nil {
-			fmt.Printf("Erro no download de %s: %v\n", res.Label, res.Error)
+			logger.WriteLog(fmt.Sprintf("Falha no download de %s: %v", res.Label, res.Error), "ERROR", logger.Red)
+			report.AddDeployReport("Motor de Download", res.Label, report.StatusFalha, res.Error.Error())
 			hasError = true
 		}
 	}
