@@ -12,11 +12,13 @@ import (
 	"grc-deploy/core/report"
 )
 
+// Struct para gerenciar a instalação do software
 type Installer struct {
 	FilePath    string
 	InstallPath string
 }
 
+// Função para criar uma nova instância do instalador
 func New(tempDir string) *Installer {
 	return &Installer{
 		FilePath:    filepath.Join(tempDir, "Chrome_Installer.exe"),
@@ -24,11 +26,13 @@ func New(tempDir string) *Installer {
 	}
 }
 
+// Verifica se o Google Chrome já está instalado
 func (i *Installer) IsInstalled() bool {
 	_, err := os.Stat(i.InstallPath)
 	return err == nil
 }
 
+// Baixa o instalador do Google Chrome
 func (i *Installer) Download(wg *sync.WaitGroup) {
 	defer wg.Done()
 	logger.LogStep("Baixando Google Chrome (URL Dinâmica Oficial)...")
@@ -49,6 +53,7 @@ func (i *Installer) Download(wg *sync.WaitGroup) {
 	}
 }
 
+// Instala o Google Chrome silenciosamente
 func (i *Installer) Install() {
 	logger.LogStep("Instalando Google Chrome...")
 	if _, err := os.Stat(i.FilePath); os.IsNotExist(err) {
@@ -66,5 +71,6 @@ func (i *Installer) Install() {
 		report.AddDeployReport("Utilitários", "Google Chrome", "Sucesso", "Instalado via URL Oficial")
 	}
 
+	// Remove o instalador após a instalação
 	os.Remove(i.FilePath)
 }

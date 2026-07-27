@@ -12,11 +12,13 @@ import (
 	"grc-deploy/core/report"
 )
 
+// Struct para gerenciar a instalação do software
 type Installer struct {
 	FallbackPath string
 	InstallPath  string
 }
 
+// Função para criar uma nova instância do instalador
 func New(tempDir string) *Installer {
 	return &Installer{
 		FallbackPath: filepath.Join(tempDir, "WinRAR_Fallback.exe"),
@@ -24,11 +26,13 @@ func New(tempDir string) *Installer {
 	}
 }
 
+// Verifica se o WinRAR já está instalado
 func (i *Installer) IsInstalled() bool {
 	_, err := os.Stat(i.InstallPath)
 	return err == nil
 }
 
+// Baixa o instalador do WinRAR Fallback
 func (i *Installer) Download(wg *sync.WaitGroup) {
 	defer wg.Done()
 	logger.LogStep("Baixando Fallback corporativo do WinRAR (Dropbox)...")
@@ -49,6 +53,7 @@ func (i *Installer) Download(wg *sync.WaitGroup) {
 	}
 }
 
+// Instala o WinRAR silenciosamente, primeiro tentando via Winget e, se falhar, usando o fallback
 func (i *Installer) Install() {
 	logger.LogStep("Instalando RARLab.WinRAR (Tentativa 1: Winget)...")
 
@@ -77,5 +82,6 @@ func (i *Installer) Install() {
 		report.AddDeployReport("Utilitários", "RARLab.WinRAR", "Sucesso", "Instalado via Fallback (Dropbox)")
 	}
 
+	// Remove o instalador de fallback após a instalação
 	os.Remove(i.FallbackPath)
 }

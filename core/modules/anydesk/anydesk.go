@@ -12,11 +12,13 @@ import (
 	"grc-deploy/core/report"
 )
 
+// Struct para gerenciar a instalação do software
 type Installer struct {
 	FilePath    string
 	InstallPath string
 }
 
+// Função para criar uma nova instância do instalador
 func New(tempDir string) *Installer {
 	return &Installer{
 		FilePath:    filepath.Join(tempDir, "AnyDesk_Installer.exe"),
@@ -24,11 +26,13 @@ func New(tempDir string) *Installer {
 	}
 }
 
+// Verifica se o AnyDesk já está instalado
 func (i *Installer) IsInstalled() bool {
 	_, err := os.Stat(i.InstallPath)
 	return err == nil
 }
 
+// Baixa o instalador do AnyDesk
 func (i *Installer) Download(wg *sync.WaitGroup) {
 	defer wg.Done()
 	logger.LogStep("Baixando AnyDesk (URL Dinâmica Oficial)...")
@@ -49,6 +53,7 @@ func (i *Installer) Download(wg *sync.WaitGroup) {
 	}
 }
 
+// Instala o AnyDesk silenciosamente
 func (i *Installer) Install() {
 	logger.LogStep("Instalando AnyDesk...")
 	if _, err := os.Stat(i.FilePath); os.IsNotExist(err) {
@@ -57,7 +62,7 @@ func (i *Installer) Install() {
 		return
 	}
 
-	// Abstração nativa do Váriavel de Ambiente no Go
+	// Abstração nativa da Váriavel de Ambiente no Go
 	pf := os.Getenv("ProgramFiles(x86)")
 	if pf == "" {
 		pf = `C:\Program Files (x86)`
@@ -73,5 +78,6 @@ func (i *Installer) Install() {
 		report.AddDeployReport("Utilitários", "AnyDesk", "Sucesso", "Instalado via URL Oficial")
 	}
 
+	// Remove o instalador após a instalação
 	os.Remove(i.FilePath)
 }
