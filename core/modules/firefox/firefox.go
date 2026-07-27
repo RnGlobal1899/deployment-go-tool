@@ -13,13 +13,20 @@ import (
 )
 
 type Installer struct {
-	FilePath string
+	FilePath    string
+	InstallPath string
 }
 
 func New(tempDir string) *Installer {
 	return &Installer{
-		FilePath: filepath.Join(tempDir, "Firefox_Installer.exe"),
+		FilePath:    filepath.Join(tempDir, "Firefox_Installer.exe"),
+		InstallPath: filepath.Join(os.Getenv("ProgramFiles"), "Mozilla Firefox", "firefox.exe"),
 	}
+}
+
+func (i *Installer) IsInstalled() bool {
+	_, err := os.Stat(i.InstallPath)
+	return err == nil
 }
 
 func (i *Installer) Download(wg *sync.WaitGroup) {

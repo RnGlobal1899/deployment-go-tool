@@ -14,12 +14,19 @@ import (
 
 type Installer struct {
 	FallbackPath string
+	InstallPath  string
 }
 
 func New(tempDir string) *Installer {
 	return &Installer{
 		FallbackPath: filepath.Join(tempDir, "WinRAR_Fallback.exe"),
+		InstallPath:  filepath.Join(os.Getenv("ProgramFiles"), "WinRAR", "WinRAR.exe"),
 	}
+}
+
+func (i *Installer) IsInstalled() bool {
+	_, err := os.Stat(i.InstallPath)
+	return err == nil
 }
 
 func (i *Installer) Download(wg *sync.WaitGroup) {

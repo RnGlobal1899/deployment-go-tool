@@ -13,13 +13,20 @@ import (
 )
 
 type Installer struct {
-	FilePath string
+	FilePath    string
+	InstallPath string
 }
 
 func New(tempDir string) *Installer {
 	return &Installer{
-		FilePath: filepath.Join(tempDir, "AnyDesk_Installer.exe"),
+		FilePath:    filepath.Join(tempDir, "AnyDesk_Installer.exe"),
+		InstallPath: filepath.Join(os.Getenv("ProgramFiles(x86)"), "AnyDesk", "AnyDesk.exe"),
 	}
+}
+
+func (i *Installer) IsInstalled() bool {
+	_, err := os.Stat(i.InstallPath)
+	return err == nil
 }
 
 func (i *Installer) Download(wg *sync.WaitGroup) {
