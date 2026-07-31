@@ -7,12 +7,7 @@ import (
 	"sync"
 
 	"grc-deploy/core/logger"
-	"grc-deploy/core/modules/anydesk"
-	"grc-deploy/core/modules/chrome"
-	"grc-deploy/core/modules/firefox"
 	"grc-deploy/core/modules/gemco"
-	"grc-deploy/core/modules/vnc"
-	"grc-deploy/core/modules/winrar"
 	"grc-deploy/core/report"
 
 	"github.com/wailsapp/wails/v2"
@@ -27,7 +22,7 @@ func main() {
 
 	// Inicializa o sistema de logs e ponteiros
 	logger.InitLogger("C:\\TI_Setup_Temp")
-	tempDir := "C:\\TI_Setup_Temp"
+	// tempDir := "C:\\TI_Setup_Temp"
 	logger.WriteLog("Iniciando sessão de teste", "INFO", logger.Cyan)
 
 	fmt.Println("\n--- MENU DE SELEÇÃO GEMCO 2002 ---")
@@ -95,54 +90,56 @@ func main() {
 		}
 	}
 
-	// --- MÓDULO UTILITÁRIOS ESSENCIAIS ---
-	logger.LogStep("Iniciando Módulos...")
+	// os.Exit(0)
 
-	vncInst := vnc.New(tempDir)
+	// --- MÓDULO UTILITÁRIOS ESSENCIAIS ---
+	//logger.LogStep("Iniciando Módulos...")
+
+	//vncInst := vnc.New(tempDir)
 
 	// --- BLOCO INTERATIVO DE TESTE (HOMOLOGAÇÃO VNC) ---
-	if vncInst.IsInstalled() {
-		logger.LogWarning("UltraVNC detectado no sistema.")
-		fmt.Print("  Deseja testar o Clean Nuke (Desinstalação) agora? [s/n]: ")
-		var resp string
-		fmt.Scanln(&resp)
+	//if vncInst.IsInstalled() {
+	//logger.LogWarning("UltraVNC detectado no sistema.")
+	//fmt.Print("  Deseja testar o Clean Nuke (Desinstalação) agora? [s/n]: ")
+	//var resp string
+	//fmt.Scanln(&resp)
 
-		if resp == "s" || resp == "S" {
-			vncInst.Uninstall()
-			logger.LogSuccess("Teste de desinstalação concluído. Valide o diretório e o registro.")
-			os.Exit(0) // Interrompe a esteira para você fazer a validação manual
-		}
-	}
+	//if resp == "s" || resp == "S" {
+	//vncInst.Uninstall()
+	//logger.LogSuccess("Teste de desinstalação concluído. Valide o diretório e o registro.")
+	//os.Exit(0) // Interrompe a esteira para você fazer a validação manual
+	//}
+	//}
 	// ---------------------------------------------------
 
-	chromeInst := chrome.New(tempDir)
-	firefoxInst := firefox.New(tempDir)
-	anydeskInst := anydesk.New(tempDir)
-	winrarInst := winrar.New(tempDir)
+	//chromeInst := chrome.New(tempDir)
+	//firefoxInst := firefox.New(tempDir)
+	//anydeskInst := anydesk.New(tempDir)
+	//winrarInst := winrar.New(tempDir)
 
 	// Downloads paralelos via WaitGroup
-	logger.LogStep("Iniciando fase assíncrona (Downloads Paralelos)...")
-	var wg sync.WaitGroup
-	wg.Add(5)
+	//logger.LogStep("Iniciando fase assíncrona (Downloads Paralelos)...")
+	//var wg sync.WaitGroup
+	//wg.Add(5)
 
-	go vncInst.Download(&wg)
-	go chromeInst.Download(&wg)
-	go firefoxInst.Download(&wg)
-	go anydeskInst.Download(&wg)
-	go winrarInst.Download(&wg)
+	//go vncInst.Download(&wg)
+	//go chromeInst.Download(&wg)
+	//go firefoxInst.Download(&wg)
+	//go anydeskInst.Download(&wg)
+	//go winrarInst.Download(&wg)
 
-	wg.Wait()
-	logger.LogSuccess("Fase de Rede concluída.")
+	//wg.Wait()
+	//logger.LogSuccess("Fase de Rede concluída.")
 
 	// Instalaçãoo sequencial
-	logger.LogStep("Iniciando fase de instalação sequencial (Zero Touch)...")
-	vncInst.Install()
-	chromeInst.Install()
-	firefoxInst.Install()
-	anydeskInst.Install()
-	winrarInst.Install()
+	//logger.LogStep("Iniciando fase de instalação sequencial (Zero Touch)...")
+	//vncInst.Install()
+	//chromeInst.Install()
+	//firefoxInst.Install()
+	//anydeskInst.Install()
+	//winrarInst.Install()
 
-	logger.LogSuccess("Módulo Utilitários Essenciais finalizado com sucesso.")
+	//logger.LogSuccess("Módulo Utilitários Essenciais finalizado com sucesso.")
 
 	fmt.Println("\n  ============================================================")
 	fmt.Println("  >> RELATÓRIO DE DEPLOY GERADO EM MEMÓRIA <<")

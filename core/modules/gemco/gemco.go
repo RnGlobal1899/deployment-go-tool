@@ -236,6 +236,8 @@ func (m *Module) InitGconfig() error {
 // Métodos Privados da Pipeline de Instalação
 
 func (m *Module) installBase() error {
+	logger.LogStep("Fase 1/3: Extraindo e Instalando Gemco Base...")
+
 	extractDir := filepath.Join(m.TempDir, "Extraido")
 	zipPath := filepath.Join(m.TempDir, BaseZipName)
 
@@ -246,8 +248,8 @@ func (m *Module) installBase() error {
 
 	setupExe := filepath.Join(extractDir, "setup.exe")
 
-	// Execução da instalação da base
-	exitCode, err := executor.RunSilent(setupExe, "/s", `/v/qb`)
+	// Execução da instalação da base ("/w" bloqueia a thread e aguarda o MSI "filho" encerrar)
+	exitCode, err := executor.RunSilent(setupExe, "/s", "/w", "/v/passive")
 	if err != nil || (exitCode != 0 && exitCode != 3010) {
 		return fmt.Errorf("Falha na execução do setup.exe (ExitCode %d): %v", exitCode, err)
 	}
@@ -275,6 +277,8 @@ func (m *Module) installODBCM() error {
 		k.SetStringValue(odbcmExe, "~ RUNASADMIN")
 	}
 
+	logger.LogStep("Fase 2/3: Configurando e inicializando Utilitário ODBCM...")
+
 	// Dispara e continua de maneira assincrona
 	if err := executor.RunAsync(odbcmExe); err != nil {
 		logger.WriteLog(fmt.Sprintf("Falha ao iniciar ODBCM.exe assincronamente: %v", err), "ERROR", logger.Red)
@@ -284,8 +288,13 @@ func (m *Module) installODBCM() error {
 }
 
 func (m *Module) installUpdates() error {
+	if len(m.Queue) > 0 {
+		logger.LogStep(fmt.Sprintf("Fase 3/3: Processando Fila de Atualizações Sequencial (%d itens)...", len(m.Queue)))
+	}
 	// O loop executa de forma sequencial na ordem inserida pelo Frontend.
-	for _, item := range m.Queue {
+	for i, item := range m.Queue {
+		logger.LogStep(fmt.Sprintf("  [%d/%d] Instalando pacote: %s", i+1, len(m.Queue), item))
+
 		cat, exists := Catalog[item]
 		if !exists {
 			continue
@@ -293,12 +302,10 @@ func (m *Module) installUpdates() error {
 
 		exePath := filepath.Join(m.TempDir, item)
 
-		// Define o tipo de argumento baseado no tipo do item do catalogo (SP ou Custom)
+		// Define o tipo de argumento baseado no tipo do item do catalogo (custom não leva argumento)
 		var args []string
 		if cat.Type == "SP" {
 			args = []string{"/silent"}
-		} else {
-			args = []string{"/s"}
 		}
 
 		// Executa a atualização
@@ -324,10 +331,15 @@ func extractZip(src, dest string) error {
 	}
 	defer r.Close()
 
-	for _, f := range r.File {
-		fpath := filepath.Join(dest, f.Name)
+	// Sanitiza o diretório de destino fora do loop para otimização
+	destClean := filepath.Clean(dest)
 
-		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+	for _, f := range r.File {
+		fpath := filepath.Join(destClean, f.Name)
+
+		// SAFE ZipSlip: Garante que o arquivo não escape do diretório alvo
+		// A condição (fpath != destClean) resolve o falso positivo de metadados de raiz do Dropbox
+		if !strings.HasPrefix(fpath, destClean+string(os.PathSeparator)) && fpath != destClean {
 			return fmt.Errorf("%s: caminho de arquivo ilegal", fpath)
 		}
 
