@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"embed"
 	"fmt"
 	"os"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 
 	"grc-deploy/core/logger"
@@ -18,6 +22,67 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// Retorna uma lista de chaves do catálogo do Gemco, ordenadas alfabeticamente.
+func GetGemcoCatalogMenu() []string {
+	keys := make([]string, 0, len(gemco.Catalog))
+	for k := range gemco.Catalog {
+		keys = append(keys, k)
+	}
+	// Ordena os pacotes por ordem alfabética para exibição no menu
+	sort.Strings(keys)
+	return keys
+}
+
+// Cria um CLI iterativo transacional para homologar as atualizações
+func buildInteractiveQueue() []string {
+	catalogKeys := GetGemcoCatalogMenu()
+	var queue []string
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for {
+		fmt.Println("\n==========================================================")
+		fmt.Println("  CATÁLOGO VISUAL GEMCO 2002 (SP & Customs)")
+		fmt.Println("==========================================================")
+		for i, key := range catalogKeys {
+			item := gemco.Catalog[key]
+			fmt.Printf("  [%2d] %-30s (Tipo: %-6s | Ver: %s)\n", i+1, key, item.Type, item.RegValue)
+		}
+		fmt.Println("----------------------------------------------------------")
+		fmt.Println("  [ 0] -> CONCLUIR SELEÇÃO E INICIAR DEPLOY")
+		fmt.Println("  [-1] -> CANCELAR E VOLTAR AO MENU PRINCIPAL")
+
+		if len(queue) > 0 {
+			fmt.Printf("\n  [+] Fila atual (%d itens):\n", len(queue))
+			for idx, q := range queue {
+				fmt.Printf("      %d. %s\n", idx+1, q)
+			}
+		}
+
+		fmt.Print("\n>> Digite o número do pacote para adicionar à fila: ")
+		scanner.Scan()
+		input := strings.TrimSpace(scanner.Text())
+
+		if input == "0" {
+			break
+		}
+		if input == "-1" {
+			return nil
+		}
+
+		idx, err := strconv.Atoi(input)
+		if err != nil || idx < 1 || idx > len(catalogKeys) {
+			logger.WriteLog("Opção inválida. Digite o número correspondente.", "WARNING", logger.Yellow)
+			continue
+		}
+
+		selectedItem := catalogKeys[idx-1]
+		queue = append(queue, selectedItem)
+		logger.WriteLog(fmt.Sprintf("Pacote '%s' inserido na esteira.", selectedItem), "INFO", logger.Green)
+	}
+
+	return queue
+}
+
 func main() {
 
 	// Inicializa o sistema de logs e ponteiros
@@ -27,7 +92,7 @@ func main() {
 
 	fmt.Println("\n--- MENU DE SELEÇÃO GEMCO 2002 ---")
 	fmt.Println("1) Instalar apenas a Base")
-	fmt.Println("2) Instalar Base + SP 121 + Custom 11-86 (Testar Downloads Paralelos)")
+	fmt.Println("2) Catálogo Visual (Montar fila customizada para testar Upgrades/Downgrades)")
 	fmt.Println("3) Pular teste do Gemco")
 	fmt.Print("Escolha uma opção: ")
 
@@ -36,7 +101,11 @@ func main() {
 
 	var gemcoQueue []string
 	if opcaoGemco == "2" {
-		gemcoQueue = []string{"Gemco2002SP44-00-121.exe", "Custom11-86.EXE"}
+		gemcoQueue = buildInteractiveQueue()
+		if gemcoQueue == nil {
+			logger.WriteLog("Montagem da fila cancelada pelo usuário. Abortando Gemco.", "WARNING", logger.Yellow)
+			opcaoGemco = "3"
+		}
 	}
 
 	if opcaoGemco == "1" || opcaoGemco == "2" {

@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -61,6 +63,7 @@ var Catalog = map[string]UpdateCatalog{
 	"Gemco2002SPCustom12-156.exe": {URL: "https://www.dropbox.com/scl/fi/938mihixpjrhznwjuquac/Gemco2002SPCustom12-156.exe?rlkey=3a36w6jp6shhhw26ydi6a116u&st=iok2zhzb&dl=1", Type: "Custom", RegKey: "SPCustom", RegValue: "c12.156"},
 	"Gemco2002SPCustom12-164.EXE": {URL: "https://www.dropbox.com/scl/fi/eg0r530ofnvzm3x5lumcz/Gemco2002SPCustom12-164.EXE?rlkey=1a70yflb64rmdjnwyqdldwhk3&st=0ks4zo6m&dl=1", Type: "Custom", RegKey: "SPCustom", RegValue: "c12.164"},
 	"Gemco2002SPCustom12-213.EXE": {URL: "https://www.dropbox.com/scl/fi/ptinb7dla1cghlpjgxb50/Gemco2002SPCustom12-213.EXE?rlkey=4ccr0c7zy7p0ut1laeyylkdmu&st=i3l10lzr&dl=1", Type: "Custom", RegKey: "SPCustom", RegValue: "c12.213"},
+	"Gemco2002SPCustom12-219.EXE": {URL: "https://www.dropbox.com/scl/fi/0fqjzp2m3pib8xp7anhhk/Gemco2002SPCustom12-219.EXE?rlkey=cvwmpmxmdrmzzevaryvmmvkd5&st=kxy4lkc8&dl=1", Type: "Custom", RegKey: "SPCustom", RegValue: "c12.219"},
 }
 
 // Struct para gerenciar o processo de instalação do Gemco
@@ -69,13 +72,115 @@ type Module struct {
 	Queue   []string
 }
 
+// Auxiliar: Lê a versão atual instalada no registro
+func (m *Module) getInstalledVersion(regKey string) string {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.QUERY_VALUE)
+	if err != nil {
+		return ""
+	}
+	defer k.Close()
+	val, _, err := k.GetStringValue(regKey)
+	if err != nil {
+		return ""
+	}
+
+	return val
+}
+
+// Auxiliar: Extrai os pesos númericos das versões para calculo seguro
+func getUpdateWeight(versionStr string) []int {
+	re := regexp.MustCompile(`\d+`)
+	matches := re.FindAllString(versionStr, -1)
+	var weights []int
+	for _, m := range matches {
+		w, _ := strconv.Atoi(m)
+		weights = append(weights, w)
+	}
+	return weights
+}
+
+// Auxiliar: Compara o peso de duas versões
+func compareWeights(a, b []int) int {
+	maxLen := len(a)
+	if len(b) > maxLen {
+		maxLen = len(b)
+	}
+	for i := 0; i < maxLen; i++ {
+		valA, valB := 0, 0
+		if i < len(a) {
+			valA = a[i]
+		}
+		if i < len(b) {
+			valB = b[i]
+		}
+		if valA < valB {
+			return -1
+		}
+		if valA > valB {
+			return 1
+		}
+	}
+	return 0
+}
+
+// Auxiliar: Injeta o SP 121 dinamicamente na fila caso o SP alvo requeira
+func (m *Module) applyQueueBusinessRules() {
+	// Verifica se existe a SP121 no catalogo
+	sp121Key := "Gemco2002SP44-00-121.exe"
+	sp121Cat, exists := Catalog[sp121Key]
+	if !exists {
+		return
+	}
+	// Pega o valor bruto da SP
+	sp121Weight := getUpdateWeight(sp121Cat.RegValue)
+
+	// Verifica se o item escolhido do catalogo é SP e se é maior que a SP121
+	inject121Index := -1
+	for i, item := range m.Queue {
+		cat, ok := Catalog[item]
+		if ok && cat.Type == "SP" {
+			itemWeight := getUpdateWeight(cat.RegValue)
+			if compareWeights(itemWeight, sp121Weight) > 0 {
+				inject121Index = i
+				break
+			}
+		}
+	}
+
+	// Caso seja necessária a SP121, arre a fila de instalação para verificar se já contém
+	if inject121Index >= 0 {
+		contains121 := false
+		for _, item := range m.Queue {
+			if item == sp121Key {
+				contains121 = true
+				break
+			}
+		}
+		// Se não tiver a SP121 na fila, ele verifica no regedit a versão da SP instalada para injetar a 121 caso necessário
+		if !contains121 {
+			currSP := m.getInstalledVersion("SP")
+			currWeight := getUpdateWeight(currSP)
+			if currSP == "" || compareWeights(currWeight, sp121Weight) < 0 {
+				// Injeta o pacote de forma segura criando um novo slice para evitar corrupção de memória (overlap)
+				newQueue := make([]string, 0, len(m.Queue)+1)
+				newQueue = append(newQueue, m.Queue[:inject121Index]...)
+				newQueue = append(newQueue, sp121Key)
+				newQueue = append(newQueue, m.Queue[inject121Index:]...)
+				m.Queue = newQueue
+			}
+		}
+	}
+}
+
 // Cria uma nova instância do módulo Gemco
 func New(queue []string) *Module {
 	tempPath := filepath.Join("C:\\", "TI_Setup_Temp", "Gemco_Base")
-	return &Module{
+	m := &Module{
 		TempDir: tempPath,
 		Queue:   queue,
 	}
+	m.applyQueueBusinessRules()
+	return m
 }
 
 // Executa a fase de rede de forma assíncrona, baixando os arquivos necessários
@@ -127,6 +232,8 @@ func (m *Module) Download(wg *sync.WaitGroup) {
 func (m *Module) Install() error {
 	logger.LogStep("Iniciando Fase de Instalação Sequencial (Gemco 2002)")
 
+	m.KillInstances()
+
 	if m.IsInstalled() {
 		logger.LogStep("Base existente detectada. Acionando Clean Nuke.")
 		m.CleanNuke()
@@ -160,17 +267,22 @@ func (m *Module) IsInstalled() bool {
 	return err == nil && val != ""
 }
 
-// Função para limpar profundamente as instalações do Gemco detectadas
-func (m *Module) CleanNuke() error {
-	logger.LogStep("Executando Clean Nuke Extremo (Gemco 2002)")
-
-	// 1. Mata processos conflitantes silenciosamente
+// Derruba processos conflitantes
+func (m *Module) KillInstances() {
 	procs := []string{"gemco.exe", "gconfig.exe", "odbcm.exe"}
 	for _, p := range procs {
 		cmd := exec.Command("taskkill", "/F", "/IM", p, "/T")
 		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 		cmd.Run()
 	}
+}
+
+// Limpa profundamente as instalações do Gemco detectadas
+func (m *Module) CleanNuke() error {
+	logger.LogStep("Executando Clean Nuke Extremo (Gemco 2002)")
+
+	// 1. Chamada para matar os processos
+	m.KillInstances()
 
 	// 2. Localiza e desinstala via Registro (WOW6432Node e Padrão)
 	uninstallPaths := []string{
@@ -295,9 +407,48 @@ func (m *Module) installUpdates() error {
 	for i, item := range m.Queue {
 		logger.LogStep(fmt.Sprintf("  [%d/%d] Instalando pacote: %s", i+1, len(m.Queue), item))
 
+		// Verifica se o item existe no catalogo
 		cat, exists := Catalog[item]
 		if !exists {
 			continue
+		}
+
+		// Verifica a versão atual instalada
+		currVal := m.getInstalledVersion(cat.RegKey)
+		if currVal == cat.RegValue {
+			logger.LogStep(fmt.Sprintf("%s já instalado. Pulando.", item))
+			continue
+		}
+
+		// Se o valor atual não for nulo, compara ambas as versões para realizar downgrade se necessário
+		if currVal != "" {
+			currWeight := getUpdateWeight(currVal)
+			targetWeight := getUpdateWeight(cat.RegValue)
+
+			if compareWeights(currWeight, targetWeight) > 0 {
+				logger.LogStep("DOWNGRADE Detectado: Preparando ambiente para versão divergente...")
+				k, err := registry.OpenKey(registry.LOCAL_MACHINE, RegPath, registry.SET_VALUE)
+				if err == nil {
+					k.DeleteValue(cat.RegKey)
+					k.Close()
+				}
+
+				// Sendo custom, remove uma dll que fica constantemente como resquicio
+				if cat.Type == "Custom" {
+					resquicioDll := filepath.Join(BaseDir, "ActiveX", "Custom", "DLL", "ccgstConsultaPedido.dll")
+					os.Remove(resquicioDll)
+				} else {
+					// Sendo SP, verifica a lógica da SP121
+					sp121Key := "Gemco2002SP44-00-121.exe"
+					sp121Cat := Catalog[sp121Key]
+					sp121Weight := getUpdateWeight(sp121Cat.RegValue)
+
+					if compareWeights(targetWeight, sp121Weight) > 0 {
+						logger.LogStep("DOWNGRADE de SP: Re-aplicando dependência Base 121 silenciosamente...")
+						executor.RunSilent(filepath.Join(m.TempDir, sp121Key), "/silent")
+					}
+				}
+			}
 		}
 
 		exePath := filepath.Join(m.TempDir, item)
