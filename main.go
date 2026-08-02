@@ -12,6 +12,7 @@ import (
 	"grc-deploy/core/modules/kaspersky"
 	"grc-deploy/core/modules/kaspersky/endpointsecurity"
 	"grc-deploy/core/modules/kaspersky/networkagent"
+	"grc-deploy/core/modules/wps"
 	"grc-deploy/core/report"
 
 	"github.com/wailsapp/wails/v2"
@@ -24,163 +25,171 @@ var assets embed.FS
 
 func main() {
 
-	// Inicializa o sistema de logs e ponteiros
-	logger.InitLogger("C:\\TI_Setup_Temp")
-	// tempDir := "C:\\TI_Setup_Temp"
-	logger.WriteLog("Iniciando sessão de teste", "INFO", logger.Cyan)
+	scannerMenu := bufio.NewScanner(os.Stdin)
 
-	// --- MÓDULO KASPERSKY MANAGER (INTERATIVO) ---
-	fmt.Println("\n--- MENU DE SELEÇÃO KASPERSKY ---")
-	fmt.Println("1) Gerenciar apenas o Network Agent")
-	fmt.Println("2) Gerenciar apenas o Endpoint Security")
-	fmt.Println("3) Gerenciar Ambos (Agente -> Endpoint)")
-	fmt.Println("0) Pular teste do módulo Kaspersky")
-	fmt.Print("Escolha uma opção: ")
+	// Loop infinito iterativo para múltiplos testes sem derrubar o processo
+	for {
+		fmt.Println("\n============================================================")
+		fmt.Println("      GRC DEPLOY - TESTES DE MÓDULOS CLI INTERATIVO")
+		fmt.Println("============================================================")
+		fmt.Println("  1) Kaspersky Manager (Endpoint & Network Agent)")
+		fmt.Println("  2) WPS Office")
+		fmt.Println("  3) OCS Inventory Agent (Futuro)")
+		fmt.Println("  0) Sair do Loop CLI (Prosseguir para UI ou Encerrar)")
+		fmt.Print("  Escolha uma opção: ")
 
-	scannerKasp := bufio.NewScanner(os.Stdin)
-	scannerKasp.Scan()
-	opcaoKasp := strings.TrimSpace(scannerKasp.Text())
+		scannerMenu.Scan()
+		mainOpt := strings.TrimSpace(scannerMenu.Text())
 
-	kaspManager := kaspersky.NewKasperskyManager()
-
-	// Processa Agente
-	if opcaoKasp == "1" || opcaoKasp == "3" {
-		fmt.Println("\n  [KASPERSKY] --- GERENCIANDO NETWORK AGENT ---")
-		if networkagent.CheckInstalled() {
-			logger.LogWarning("O Network Agent já está instalado nesta máquina.")
-			fmt.Println("  1) Desinstalar")
-			fmt.Println("  2) Reapontar servidor (klmover)")
-			fmt.Println("  3) Seguir em frente (Pular)")
-			fmt.Print("Escolha uma opção: ")
-			scannerKasp.Scan()
-			optAgt := strings.TrimSpace(scannerKasp.Text())
-
-			if optAgt == "1" {
-				kaspManager.UninstallNetworkAgent()
-			} else if optAgt == "2" {
-				fmt.Print("Informe o IP do servidor KSC: ")
-				scannerKasp.Scan()
-				ip := strings.TrimSpace(scannerKasp.Text())
-				kaspManager.RepointNetworkAgent(ip)
-			} else {
-				logger.WriteLog("Etapa do Network Agent pulada pelo usuário.", "INFO", logger.Cyan)
-			}
-		} else {
-			logger.LogStep("Network Agent NÃO detectado.")
-			fmt.Print("Informe o IP do servidor KSC para a instalação: ")
-			scannerKasp.Scan()
-			ip := strings.TrimSpace(scannerKasp.Text())
-
-			logger.LogStep("Iniciando fase assíncrona (Download Agent)...")
-			var wg sync.WaitGroup
-			wg.Add(1)
-			go networkagent.DownloadAsync(&wg)
-			wg.Wait()
-
-			logger.LogStep("Iniciando instalação do Agente...")
-			networkagent.InstallOrRepoint(ip)
+		if mainOpt == "0" {
+			logger.LogStep("Saindo do Menu Iterativo CLI...")
+			break
 		}
-	}
 
-	// Processa Endpoint
-	if opcaoKasp == "2" || opcaoKasp == "3" {
-		fmt.Println("\n  [KASPERSKY] --- GERENCIANDO ENDPOINT SECURITY ---")
-		if endpointsecurity.CheckInstalled() {
-			logger.LogWarning("O Endpoint Security já está instalado nesta máquina.")
-			fmt.Println("  1) Desinstalar")
-			fmt.Println("  2) Seguir em frente (Pular)")
+		switch mainOpt {
+		case "1":
+			// --- MÓDULO KASPERSKY MANAGER ---
+			fmt.Println("\n--- MENU DE SELEÇÃO KASPERSKY ---")
+			fmt.Println("1) Gerenciar apenas o Network Agent")
+			fmt.Println("2) Gerenciar apenas o Endpoint Security")
+			fmt.Println("3) Gerenciar Ambos (Agente -> Endpoint)")
+			fmt.Println("0) Voltar ao menu principal")
 			fmt.Print("Escolha uma opção: ")
-			scannerKasp.Scan()
-			optEnd := strings.TrimSpace(scannerKasp.Text())
 
-			if optEnd == "1" {
-				err := kaspManager.UninstallEndpoint("", "")
-				if err == endpointsecurity.ErrPasswordRequired {
-					logger.LogWarning("Desinstalação bloqueada. É necessário inserir as credenciais KLAdmin.")
-					fmt.Print("Usuário KLAdmin: ")
-					scannerKasp.Scan()
-					user := strings.TrimSpace(scannerKasp.Text())
-					fmt.Print("Senha KLAdmin: ")
-					scannerKasp.Scan()
-					pass := strings.TrimSpace(scannerKasp.Text())
+			scannerMenu.Scan()
+			opcaoKasp := strings.TrimSpace(scannerMenu.Text())
+			kaspManager := kaspersky.NewKasperskyManager()
 
-					errRetry := kaspManager.UninstallEndpoint(user, pass)
-					if errRetry != nil {
-						logger.WriteLog(fmt.Sprintf("Falha mesmo com credenciais: %v", errRetry), "ERROR", logger.Red)
+			if opcaoKasp == "1" || opcaoKasp == "3" {
+				fmt.Println("\n  [KASPERSKY] --- GERENCIANDO NETWORK AGENT ---")
+				if networkagent.CheckInstalled() {
+					logger.LogWarning("O Network Agent já está instalado nesta máquina.")
+					fmt.Println("  1) Desinstalar")
+					fmt.Println("  2) Reapontar servidor (klmover)")
+					fmt.Println("  3) Seguir em frente (Pular)")
+					fmt.Print("Escolha uma opção: ")
+					scannerMenu.Scan()
+					optAgt := strings.TrimSpace(scannerMenu.Text())
+
+					if optAgt == "1" {
+						kaspManager.UninstallNetworkAgent()
+					} else if optAgt == "2" {
+						fmt.Print("Informe o IP do servidor KSC: ")
+						scannerMenu.Scan()
+						ip := strings.TrimSpace(scannerMenu.Text())
+						kaspManager.RepointNetworkAgent(ip)
+					} else {
+						logger.WriteLog("Etapa do Network Agent pulada pelo usuário.", "INFO", logger.Cyan)
 					}
-				} else if err != nil {
-					logger.WriteLog(fmt.Sprintf("Erro ao desinstalar Endpoint: %v", err), "ERROR", logger.Red)
+				} else {
+					logger.LogStep("Network Agent NÃO detectado.")
+					fmt.Print("Informe o IP do servidor KSC para a instalação: ")
+					scannerMenu.Scan()
+					ip := strings.TrimSpace(scannerMenu.Text())
+
+					logger.LogStep("Iniciando fase assíncrona (Download Agent)...")
+					var wg sync.WaitGroup
+					wg.Add(1)
+					go networkagent.DownloadAsync(&wg)
+					wg.Wait()
+
+					logger.LogStep("Iniciando instalação do Agente...")
+					networkagent.InstallOrRepoint(ip)
+				}
+			}
+
+			if opcaoKasp == "2" || opcaoKasp == "3" {
+				fmt.Println("\n  [KASPERSKY] --- GERENCIANDO ENDPOINT SECURITY ---")
+				if endpointsecurity.CheckInstalled() {
+					logger.LogWarning("O Endpoint Security já está instalado nesta máquina.")
+					fmt.Println("  1) Desinstalar")
+					fmt.Println("  2) Seguir em frente (Pular)")
+					fmt.Print("Escolha uma opção: ")
+					scannerMenu.Scan()
+					optEnd := strings.TrimSpace(scannerMenu.Text())
+
+					if optEnd == "1" {
+						err := kaspManager.UninstallEndpoint("", "")
+						if err == endpointsecurity.ErrPasswordRequired {
+							logger.LogWarning("Desinstalação bloqueada. É necessário inserir as credenciais KLAdmin.")
+							fmt.Print("Usuário KLAdmin: ")
+							scannerMenu.Scan()
+							user := strings.TrimSpace(scannerMenu.Text())
+							fmt.Print("Senha KLAdmin: ")
+							scannerMenu.Scan()
+							pass := strings.TrimSpace(scannerMenu.Text())
+
+							errRetry := kaspManager.UninstallEndpoint(user, pass)
+							if errRetry != nil {
+								logger.WriteLog(fmt.Sprintf("Falha mesmo com credenciais: %v", errRetry), "ERROR", logger.Red)
+							}
+						} else if err != nil {
+							logger.WriteLog(fmt.Sprintf("Erro ao desinstalar Endpoint: %v", err), "ERROR", logger.Red)
+						}
+					} else {
+						logger.WriteLog("Etapa do Endpoint Security pulada pelo usuário.", "INFO", logger.Cyan)
+					}
+				} else {
+					logger.LogStep("Endpoint Security NÃO detectado.")
+					fmt.Print("Informe a licença de ativação (ou deixe em branco para instalar sem ativar): ")
+					scannerMenu.Scan()
+					lic := strings.TrimSpace(scannerMenu.Text())
+
+					logger.LogStep("Iniciando fase assíncrona (Download Endpoint)...")
+					var wg sync.WaitGroup
+					wg.Add(1)
+					go endpointsecurity.DownloadAsync(&wg)
+					wg.Wait()
+
+					logger.LogStep("Iniciando instalação do Endpoint...")
+					endpointsecurity.InstallOrActivate(lic)
+				}
+			}
+
+		case "2":
+			// --- MÓDULO WPS OFFICE ---
+			fmt.Println("\n--- MENU DE SELEÇÃO WPS OFFICE ---")
+			wpsManager := wps.NewWpsManager()
+
+			isInstalled, uninstPath := wpsManager.CheckInstalled()
+			if isInstalled {
+				logger.LogWarning("O WPS Office já está instalado nesta máquina.")
+				fmt.Println("  1) Desinstalar silenciosamente")
+				fmt.Println("  2) Forçar Reinstalação Completa")
+				fmt.Println("  0) Voltar ao menu principal")
+				fmt.Print("Escolha uma opção: ")
+
+				scannerMenu.Scan()
+				optWps := strings.TrimSpace(scannerMenu.Text())
+
+				if optWps == "1" {
+					wpsManager.Uninstall(uninstPath)
+				} else if optWps == "2" {
+					wpsManager.Deploy(true)
+				} else {
+					logger.WriteLog("Operação cancelada pelo usuário.", "INFO", logger.Cyan)
 				}
 			} else {
-				logger.WriteLog("Etapa do Endpoint Security pulada pelo usuário.", "INFO", logger.Cyan)
+				logger.LogStep("WPS Office NÃO detectado.")
+				fmt.Println("  1) Iniciar Deploy Autônomo (Download -> Instalação Silenciosa)")
+				fmt.Println("  0) Voltar ao menu principal")
+				fmt.Print("Escolha uma opção: ")
+
+				scannerMenu.Scan()
+				optWps := strings.TrimSpace(scannerMenu.Text())
+
+				if optWps == "1" {
+					wpsManager.Deploy(false)
+				}
 			}
-		} else {
-			logger.LogStep("Endpoint Security NÃO detectado.")
-			fmt.Print("Informe a licença de ativação (ou deixe em branco para instalar sem ativar): ")
-			scannerKasp.Scan()
-			lic := strings.TrimSpace(scannerKasp.Text())
 
-			logger.LogStep("Iniciando fase assíncrona (Download Endpoint)...")
-			var wg sync.WaitGroup
-			wg.Add(1)
-			go endpointsecurity.DownloadAsync(&wg)
-			wg.Wait()
+		case "3":
+			logger.LogWarning("Módulo OCS Inventory ainda não implementado. (Próxima etapa!)")
 
-			logger.LogStep("Iniciando instalação do Endpoint...")
-			endpointsecurity.InstallOrActivate(lic)
+		default:
+			logger.WriteLog("Opção inválida.", "ERROR", logger.Red)
 		}
 	}
-
-	// os.Exit(0)
-
-	// --- MÓDULO UTILITÁRIOS ESSENCIAIS ---
-	//logger.LogStep("Iniciando Módulos...")
-
-	//vncInst := vnc.New(tempDir)
-
-	// --- BLOCO INTERATIVO DE TESTE (HOMOLOGAÇÃO VNC) ---
-	//if vncInst.IsInstalled() {
-	//logger.LogWarning("UltraVNC detectado no sistema.")
-	//fmt.Print("  Deseja testar o Clean Nuke (Desinstalação) agora? [s/n]: ")
-	//var resp string
-	//fmt.Scanln(&resp)
-
-	//if resp == "s" || resp == "S" {
-	//vncInst.Uninstall()
-	//logger.LogSuccess("Teste de desinstalação concluído. Valide o diretório e o registro.")
-	//os.Exit(0) // Interrompe a esteira para você fazer a validação manual
-	//}
-	//}
-	// ---------------------------------------------------
-
-	//chromeInst := chrome.New(tempDir)
-	//firefoxInst := firefox.New(tempDir)
-	//anydeskInst := anydesk.New(tempDir)
-	//winrarInst := winrar.New(tempDir)
-
-	// Downloads paralelos via WaitGroup
-	//logger.LogStep("Iniciando fase assíncrona (Downloads Paralelos)...")
-	//var wg sync.WaitGroup
-	//wg.Add(5)
-
-	//go vncInst.Download(&wg)
-	//go chromeInst.Download(&wg)
-	//go firefoxInst.Download(&wg)
-	//go anydeskInst.Download(&wg)
-	//go winrarInst.Download(&wg)
-
-	//wg.Wait()
-	//logger.LogSuccess("Fase de Rede concluída.")
-
-	// Instalaçãoo sequencial
-	//logger.LogStep("Iniciando fase de instalação sequencial (Zero Touch)...")
-	//vncInst.Install()
-	//chromeInst.Install()
-	//firefoxInst.Install()
-	//anydeskInst.Install()
-	//winrarInst.Install()
-
-	//logger.LogSuccess("Módulo Utilitários Essenciais finalizado com sucesso.")
 
 	fmt.Println("\n  ============================================================")
 	fmt.Println("  >> RELATÓRIO DE DEPLOY GERADO EM MEMÓRIA <<")
