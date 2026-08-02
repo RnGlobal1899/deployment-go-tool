@@ -183,8 +183,6 @@ func DownloadsParalelos(items []DownloadItem) error {
 	}
 	if hasError {
 		return fmt.Errorf("Falha em um ou mais downloads. Verifique os logs acima para detalhes.")
-	} else {
-		fmt.Println("Todos os downloads concluídos com sucesso.")
 	}
 	return nil
 }
