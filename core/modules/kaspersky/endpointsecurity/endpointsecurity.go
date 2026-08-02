@@ -48,7 +48,7 @@ func DownloadAsync(wg *sync.WaitGroup) {
 	err := downloader.DownloadsParalelos(fila)
 
 	if err != nil {
-		logger.WriteLog(fmt.Errorf("Falha no download da Payload do Endpoint Security: %w", err).Error(), "ERROR", logger.Red)
+		logger.WriteLog(fmt.Errorf("Falha no download do Endpoint Security: %w", err).Error(), "ERROR", logger.Red)
 		report.AddDeployReport("Endpoint Security", "Download", "FALHA", fmt.Sprintf("Erro: %v", err))
 	}
 }
