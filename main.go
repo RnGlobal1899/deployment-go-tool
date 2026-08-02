@@ -5,13 +5,13 @@ import (
 	"embed"
 	"fmt"
 	"os"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 
 	"grc-deploy/core/logger"
-	"grc-deploy/core/modules/gemco"
+	"grc-deploy/core/modules/kaspersky"
+	"grc-deploy/core/modules/kaspersky/endpointsecurity"
+	"grc-deploy/core/modules/kaspersky/networkagent"
 	"grc-deploy/core/report"
 
 	"github.com/wailsapp/wails/v2"
@@ -22,67 +22,6 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// Retorna uma lista de chaves do catálogo do Gemco, ordenadas alfabeticamente.
-func GetGemcoCatalogMenu() []string {
-	keys := make([]string, 0, len(gemco.Catalog))
-	for k := range gemco.Catalog {
-		keys = append(keys, k)
-	}
-	// Ordena os pacotes por ordem alfabética para exibição no menu
-	sort.Strings(keys)
-	return keys
-}
-
-// Cria um CLI iterativo transacional para homologar as atualizações
-func buildInteractiveQueue() []string {
-	catalogKeys := GetGemcoCatalogMenu()
-	var queue []string
-	scanner := bufio.NewScanner(os.Stdin)
-
-	for {
-		fmt.Println("\n==========================================================")
-		fmt.Println("  CATÁLOGO VISUAL GEMCO 2002 (SP & Customs)")
-		fmt.Println("==========================================================")
-		for i, key := range catalogKeys {
-			item := gemco.Catalog[key]
-			fmt.Printf("  [%2d] %-30s (Tipo: %-6s | Ver: %s)\n", i+1, key, item.Type, item.RegValue)
-		}
-		fmt.Println("----------------------------------------------------------")
-		fmt.Println("  [ 0] -> CONCLUIR SELEÇÃO E INICIAR DEPLOY")
-		fmt.Println("  [-1] -> CANCELAR E VOLTAR AO MENU PRINCIPAL")
-
-		if len(queue) > 0 {
-			fmt.Printf("\n  [+] Fila atual (%d itens):\n", len(queue))
-			for idx, q := range queue {
-				fmt.Printf("      %d. %s\n", idx+1, q)
-			}
-		}
-
-		fmt.Print("\n>> Digite o número do pacote para adicionar à fila: ")
-		scanner.Scan()
-		input := strings.TrimSpace(scanner.Text())
-
-		if input == "0" {
-			break
-		}
-		if input == "-1" {
-			return nil
-		}
-
-		idx, err := strconv.Atoi(input)
-		if err != nil || idx < 1 || idx > len(catalogKeys) {
-			logger.WriteLog("Opção inválida. Digite o número correspondente.", "WARNING", logger.Yellow)
-			continue
-		}
-
-		selectedItem := catalogKeys[idx-1]
-		queue = append(queue, selectedItem)
-		logger.WriteLog(fmt.Sprintf("Pacote '%s' inserido na esteira.", selectedItem), "INFO", logger.Green)
-	}
-
-	return queue
-}
-
 func main() {
 
 	// Inicializa o sistema de logs e ponteiros
@@ -90,86 +29,105 @@ func main() {
 	// tempDir := "C:\\TI_Setup_Temp"
 	logger.WriteLog("Iniciando sessão de teste", "INFO", logger.Cyan)
 
-	// Pre-Flight: Encerrar instâncias ativas do Gemco antes de carregar o menu
-	logger.LogStep("Verificando e encerrando instâncias ativas do Gemco...")
-	preCheck := gemco.New(nil)
-	preCheck.KillInstances()
-	logger.LogSuccess("Instâncias verificadas e neutralizadas.")
-
-	fmt.Println("\n--- MENU DE SELEÇÃO GEMCO 2002 ---")
-	fmt.Println("1) Instalar apenas a Base (Setup completo do zero)")
-	fmt.Println("2) Instalar apenas SP / Custom (Atualização isolada via Catálogo)")
-	fmt.Println("3) Voltar (Pular teste do módulo Gemco)")
+	// --- MÓDULO KASPERSKY MANAGER (INTERATIVO) ---
+	fmt.Println("\n--- MENU DE SELEÇÃO KASPERSKY ---")
+	fmt.Println("1) Gerenciar apenas o Network Agent")
+	fmt.Println("2) Gerenciar apenas o Endpoint Security")
+	fmt.Println("3) Gerenciar Ambos (Agente -> Endpoint)")
+	fmt.Println("0) Pular teste do módulo Kaspersky")
 	fmt.Print("Escolha uma opção: ")
 
-	var opcaoGemco string
-	fmt.Scanln(&opcaoGemco)
+	scannerKasp := bufio.NewScanner(os.Stdin)
+	scannerKasp.Scan()
+	opcaoKasp := strings.TrimSpace(scannerKasp.Text())
 
-	var gemcoQueue []string
-	includeBase := false
+	kaspManager := kaspersky.NewKasperskyManager()
 
-	if opcaoGemco == "1" {
-		includeBase = true
-	} else if opcaoGemco == "2" {
-		includeBase = false
-		gemcoQueue = buildInteractiveQueue()
-		if len(gemcoQueue) == 0 {
-			logger.WriteLog("Seleção cancelada ou fila vazia. Abortando Gemco.", "WARNING", logger.Yellow)
-			opcaoGemco = "3"
+	// Processa Agente
+	if opcaoKasp == "1" || opcaoKasp == "3" {
+		fmt.Println("\n  [KASPERSKY] --- GERENCIANDO NETWORK AGENT ---")
+		if networkagent.CheckInstalled() {
+			logger.LogWarning("O Network Agent já está instalado nesta máquina.")
+			fmt.Println("  1) Desinstalar")
+			fmt.Println("  2) Reapontar servidor (klmover)")
+			fmt.Println("  3) Seguir em frente (Pular)")
+			fmt.Print("Escolha uma opção: ")
+			scannerKasp.Scan()
+			optAgt := strings.TrimSpace(scannerKasp.Text())
+
+			if optAgt == "1" {
+				kaspManager.UninstallNetworkAgent()
+			} else if optAgt == "2" {
+				fmt.Print("Informe o IP do servidor KSC: ")
+				scannerKasp.Scan()
+				ip := strings.TrimSpace(scannerKasp.Text())
+				kaspManager.RepointNetworkAgent(ip)
+			} else {
+				logger.WriteLog("Etapa do Network Agent pulada pelo usuário.", "INFO", logger.Cyan)
+			}
+		} else {
+			logger.LogStep("Network Agent NÃO detectado.")
+			fmt.Print("Informe o IP do servidor KSC para a instalação: ")
+			scannerKasp.Scan()
+			ip := strings.TrimSpace(scannerKasp.Text())
+
+			logger.LogStep("Iniciando fase assíncrona (Download Agent)...")
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go networkagent.DownloadAsync(&wg)
+			wg.Wait()
+
+			logger.LogStep("Iniciando instalação do Agente...")
+			networkagent.InstallOrRepoint(ip)
 		}
 	}
 
-	if opcaoGemco == "1" || opcaoGemco == "2" {
-		gemcoInst := gemco.New(gemcoQueue)
+	// Processa Endpoint
+	if opcaoKasp == "2" || opcaoKasp == "3" {
+		fmt.Println("\n  [KASPERSKY] --- GERENCIANDO ENDPOINT SECURITY ---")
+		if endpointsecurity.CheckInstalled() {
+			logger.LogWarning("O Endpoint Security já está instalado nesta máquina.")
+			fmt.Println("  1) Desinstalar")
+			fmt.Println("  2) Seguir em frente (Pular)")
+			fmt.Print("Escolha uma opção: ")
+			scannerKasp.Scan()
+			optEnd := strings.TrimSpace(scannerKasp.Text())
 
-		executarGemco := true
-		// Restrição de Clean Nuke aplicada apenas se o usuário for instalar a Base
-		if includeBase && gemcoInst.IsInstalled() {
-			logger.LogWarning("Gemco 2002 já está instalado no sistema.")
-			fmt.Print("  Deseja pular a restrição, aplicar um Clean Nuke e reinstalar a Base agora? [s/n]: ")
-			var resp string
-			fmt.Scanln(&resp)
+			if optEnd == "1" {
+				err := kaspManager.UninstallEndpoint("", "")
+				if err == endpointsecurity.ErrPasswordRequired {
+					logger.LogWarning("Desinstalação bloqueada. É necessário inserir as credenciais KLAdmin.")
+					fmt.Print("Usuário KLAdmin: ")
+					scannerKasp.Scan()
+					user := strings.TrimSpace(scannerKasp.Text())
+					fmt.Print("Senha KLAdmin: ")
+					scannerKasp.Scan()
+					pass := strings.TrimSpace(scannerKasp.Text())
 
-			if resp == "s" || resp == "S" {
-				logger.LogStep("A instalação forçará o Clean Nuke Extremo.")
-			} else {
-				executarGemco = false
-				logger.WriteLog("Teste do Gemco abortado pelo usuário.", "INFO", logger.Cyan)
-			}
-		}
-
-		if executarGemco {
-			logger.LogStep("Iniciando fase assíncrona (Download Gemco)...")
-			var wgGemco sync.WaitGroup
-			wgGemco.Add(1)
-
-			go gemcoInst.Download(includeBase, &wgGemco)
-			wgGemco.Wait()
-			logger.LogSuccess("Fase de Rede do Gemco concluída.")
-
-			logger.LogStep("Iniciando fase de instalação sequencial (Gemco)...")
-			err := gemcoInst.Install(includeBase)
-
-			if err != nil {
-				logger.WriteLog(fmt.Sprintf("Falha ao instalar o Gemco: %v", err), "ERROR", logger.Red)
-			} else {
-				// Revalidação obrigatória no pós-instalação
-				if gemcoInst.IsInstalled() {
-					logger.LogSuccess("Gemco 2002 validado com sucesso no registro pós-instalação!")
-
-					// O Gconfig só é invocado se a instalação envolveu a base do zero
-					if includeBase {
-						fmt.Print("\n  Deseja iniciar o Gconfig agora (irá pausar o terminal)? [s/n]: ")
-						var respGconfig string
-						fmt.Scanln(&respGconfig)
-						if respGconfig == "s" || respGconfig == "S" {
-							gemcoInst.InitGconfig()
-						}
+					errRetry := kaspManager.UninstallEndpoint(user, pass)
+					if errRetry != nil {
+						logger.WriteLog(fmt.Sprintf("Falha mesmo com credenciais: %v", errRetry), "ERROR", logger.Red)
 					}
-				} else {
-					logger.WriteLog("O método Install finalizou sem erros, mas IsInstalled() retornou false.", "ERROR", logger.Red)
+				} else if err != nil {
+					logger.WriteLog(fmt.Sprintf("Erro ao desinstalar Endpoint: %v", err), "ERROR", logger.Red)
 				}
+			} else {
+				logger.WriteLog("Etapa do Endpoint Security pulada pelo usuário.", "INFO", logger.Cyan)
 			}
+		} else {
+			logger.LogStep("Endpoint Security NÃO detectado.")
+			fmt.Print("Informe a licença de ativação (ou deixe em branco para instalar sem ativar): ")
+			scannerKasp.Scan()
+			lic := strings.TrimSpace(scannerKasp.Text())
+
+			logger.LogStep("Iniciando fase assíncrona (Download Endpoint)...")
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go endpointsecurity.DownloadAsync(&wg)
+			wg.Wait()
+
+			logger.LogStep("Iniciando instalação do Endpoint...")
+			endpointsecurity.InstallOrActivate(lic)
 		}
 	}
 
