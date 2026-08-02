@@ -7,6 +7,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"grc-deploy/core/downloader"
 	"grc-deploy/core/executor"
@@ -86,6 +87,27 @@ func (w *WpsManager) Uninstall(uninstallerPath string) error {
 		report.AddDeployReport("WPS Office", "Desinstalação", "Falha", err.Error())
 		logger.WriteLog(fmt.Sprintf("Erro ao desinstalar WPS: %v", err), "ERROR", logger.Red)
 		return fmt.Errorf("falha crítica na desinstalação: %v", err)
+	}
+
+	logger.LogStep("Aguardando a conclusão da desinstalação em background...")
+
+	timeout := time.After(2 * time.Minute)
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+ForLoop:
+	for {
+		select {
+		case <-timeout:
+			logger.WriteLog("Timeout atingido aguardando a remoção dos diretórios do WPS.", "WARNING", logger.Yellow)
+			break ForLoop
+		case <-ticker.C:
+			isInstalled, _ := w.CheckInstalled()
+			if !isInstalled {
+				// Se CheckInstalled retornar false, a exclusão em background terminou
+				break ForLoop
+			}
+		}
 	}
 
 	report.AddDeployReport("WPS Office", "Desinstalação", "Sucesso", "")
