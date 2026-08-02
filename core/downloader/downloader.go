@@ -84,6 +84,30 @@ func downloadWorker(item DownloadItem, wg *sync.WaitGroup, results chan<- Result
 		return
 	}
 
+	// Verificação de cache: Se o arquivo já existe, valida tamanho e magic bytes antes de decidir baixar novamente
+	if info, err := os.Stat(item.Destination); err == nil {
+		sizeMB := float64(info.Size()) / (1024 * 1024)
+
+		// Verifica se o arquivo em cache tem o tamanho mínimo esperado
+		if sizeMB >= item.ExpectedMB {
+			// Valida a integridade (Magic Bytes) do arquivo em cache
+			if err := validarMagicBytes(item.Destination, item.MagicType); err == nil {
+				logger.LogSuccess(fmt.Sprintf("%s encontrado em cache local (%.2f MB). Download pulado.", item.Label, sizeMB))
+				logger.WriteLog(fmt.Sprintf("Download ignorado (Cache OK): %s -> %s", item.Label, item.Destination), "INFO", logger.Cyan)
+				report.AddDeployReport("Motor de Download", item.Label, report.StatusSucesso, "Download pulado (Cache validado)")
+
+				results <- Result{Label: item.Label, Error: nil}
+				return
+			} else {
+				logger.LogWarning(fmt.Sprintf("Cache de %s corrompido (Magic Bytes). Baixando novamente...", item.Label))
+				os.Remove(item.Destination) // Remove o arquivo corrompido da pasta
+			}
+		} else {
+			logger.LogWarning(fmt.Sprintf("Cache de %s incompleto (%.2f MB < %.2f MB). Baixando novamente...", item.Label, sizeMB, item.ExpectedMB))
+			os.Remove(item.Destination) // Remove o arquivo incompleto da pasta
+		}
+	}
+
 	// Realiza o download do arquivo
 	resp, err := http.Get(item.URL)
 	if err != nil {
