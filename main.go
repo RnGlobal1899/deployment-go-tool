@@ -90,20 +90,31 @@ func main() {
 	// tempDir := "C:\\TI_Setup_Temp"
 	logger.WriteLog("Iniciando sessão de teste", "INFO", logger.Cyan)
 
+	// Pre-Flight: Encerrar instâncias ativas do Gemco antes de carregar o menu
+	logger.LogStep("Verificando e encerrando instâncias ativas do Gemco...")
+	preCheck := gemco.New(nil)
+	preCheck.KillInstances()
+	logger.LogSuccess("Instâncias verificadas e neutralizadas.")
+
 	fmt.Println("\n--- MENU DE SELEÇÃO GEMCO 2002 ---")
-	fmt.Println("1) Instalar apenas a Base")
-	fmt.Println("2) Catálogo Visual (Montar fila customizada para testar Upgrades/Downgrades)")
-	fmt.Println("3) Pular teste do Gemco")
+	fmt.Println("1) Instalar apenas a Base (Setup completo do zero)")
+	fmt.Println("2) Instalar apenas SP / Custom (Atualização isolada via Catálogo)")
+	fmt.Println("3) Voltar (Pular teste do módulo Gemco)")
 	fmt.Print("Escolha uma opção: ")
 
 	var opcaoGemco string
 	fmt.Scanln(&opcaoGemco)
 
 	var gemcoQueue []string
-	if opcaoGemco == "2" {
+	includeBase := false
+
+	if opcaoGemco == "1" {
+		includeBase = true
+	} else if opcaoGemco == "2" {
+		includeBase = false
 		gemcoQueue = buildInteractiveQueue()
-		if gemcoQueue == nil {
-			logger.WriteLog("Montagem da fila cancelada pelo usuário. Abortando Gemco.", "WARNING", logger.Yellow)
+		if len(gemcoQueue) == 0 {
+			logger.WriteLog("Seleção cancelada ou fila vazia. Abortando Gemco.", "WARNING", logger.Yellow)
 			opcaoGemco = "3"
 		}
 	}
@@ -112,15 +123,15 @@ func main() {
 		gemcoInst := gemco.New(gemcoQueue)
 
 		executarGemco := true
-		if gemcoInst.IsInstalled() {
+		// Restrição de Clean Nuke aplicada apenas se o usuário for instalar a Base
+		if includeBase && gemcoInst.IsInstalled() {
 			logger.LogWarning("Gemco 2002 já está instalado no sistema.")
-			fmt.Print("  Deseja pular a restrição, aplicar um Clean Nuke e reinstalar agora? [s/n]: ")
+			fmt.Print("  Deseja pular a restrição, aplicar um Clean Nuke e reinstalar a Base agora? [s/n]: ")
 			var resp string
 			fmt.Scanln(&resp)
 
 			if resp == "s" || resp == "S" {
-				logger.LogStep("Executando Clean Nuke isoladamente antes do teste...")
-				gemcoInst.CleanNuke()
+				logger.LogStep("A instalação forçará o Clean Nuke Extremo.")
 			} else {
 				executarGemco = false
 				logger.WriteLog("Teste do Gemco abortado pelo usuário.", "INFO", logger.Cyan)
@@ -132,12 +143,12 @@ func main() {
 			var wgGemco sync.WaitGroup
 			wgGemco.Add(1)
 
-			go gemcoInst.Download(&wgGemco)
+			go gemcoInst.Download(includeBase, &wgGemco)
 			wgGemco.Wait()
 			logger.LogSuccess("Fase de Rede do Gemco concluída.")
 
 			logger.LogStep("Iniciando fase de instalação sequencial (Gemco)...")
-			err := gemcoInst.Install()
+			err := gemcoInst.Install(includeBase)
 
 			if err != nil {
 				logger.WriteLog(fmt.Sprintf("Falha ao instalar o Gemco: %v", err), "ERROR", logger.Red)
@@ -146,11 +157,14 @@ func main() {
 				if gemcoInst.IsInstalled() {
 					logger.LogSuccess("Gemco 2002 validado com sucesso no registro pós-instalação!")
 
-					fmt.Print("\n  Deseja iniciar o Gconfig agora (irá pausar o terminal)? [s/n]: ")
-					var respGconfig string
-					fmt.Scanln(&respGconfig)
-					if respGconfig == "s" || respGconfig == "S" {
-						gemcoInst.InitGconfig()
+					// O Gconfig só é invocado se a instalação envolveu a base do zero
+					if includeBase {
+						fmt.Print("\n  Deseja iniciar o Gconfig agora (irá pausar o terminal)? [s/n]: ")
+						var respGconfig string
+						fmt.Scanln(&respGconfig)
+						if respGconfig == "s" || respGconfig == "S" {
+							gemcoInst.InitGconfig()
+						}
 					}
 				} else {
 					logger.WriteLog("O método Install finalizou sem erros, mas IsInstalled() retornou false.", "ERROR", logger.Red)

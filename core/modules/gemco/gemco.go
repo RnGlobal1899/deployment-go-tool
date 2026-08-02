@@ -134,20 +134,32 @@ func (m *Module) applyQueueBusinessRules() {
 	// Pega o valor bruto da SP
 	sp121Weight := getUpdateWeight(sp121Cat.RegValue)
 
-	// Verifica se o item escolhido do catalogo é SP e se é maior que a SP121
+	// Pega a versão atual instalada e seu peso
+	currSP := m.getInstalledVersion("SP")
+	currWeight := getUpdateWeight(currSP)
+
+	// Analisa a fila atual para encontrar o primeiro pacote que exija a SP 121
 	inject121Index := -1
+	isDowngradeThatNeeds121 := false
+
 	for i, item := range m.Queue {
 		cat, ok := Catalog[item]
 		if ok && cat.Type == "SP" {
-			itemWeight := getUpdateWeight(cat.RegValue)
-			if compareWeights(itemWeight, sp121Weight) > 0 {
+			targetWeight := getUpdateWeight(cat.RegValue)
+			if compareWeights(targetWeight, sp121Weight) > 0 {
 				inject121Index = i
+
+				// Se o ambiente atual já for maior que a SP alvo, caracteriza um downgrade
+				if currSP != "" && compareWeights(currWeight, targetWeight) > 0 {
+					isDowngradeThatNeeds121 = true
+				}
 				break
 			}
 		}
 	}
 
-	// Caso seja necessária a SP121, arre a fila de instalação para verificar se já contém
+	// Se encontrou um pacote que exige a SP 121, verifica se ela já está na fila.
+	// se não estiver, injeta a SP 121 antes do pacote que a requer.
 	if inject121Index >= 0 {
 		contains121 := false
 		for _, item := range m.Queue {
@@ -156,12 +168,11 @@ func (m *Module) applyQueueBusinessRules() {
 				break
 			}
 		}
-		// Se não tiver a SP121 na fila, ele verifica no regedit a versão da SP instalada para injetar a 121 caso necessário
+
 		if !contains121 {
-			currSP := m.getInstalledVersion("SP")
-			currWeight := getUpdateWeight(currSP)
-			if currSP == "" || compareWeights(currWeight, sp121Weight) < 0 {
-				// Injeta o pacote de forma segura criando um novo slice para evitar corrupção de memória (overlap)
+			// A injeção ocorre se: for uma base nova (currSP == ""), for upgrade vindo de SP < 121,
+			// ou for downgrade que reseta a versão
+			if currSP == "" || compareWeights(currWeight, sp121Weight) < 0 || isDowngradeThatNeeds121 {
 				newQueue := make([]string, 0, len(m.Queue)+1)
 				newQueue = append(newQueue, m.Queue[:inject121Index]...)
 				newQueue = append(newQueue, sp121Key)
@@ -184,31 +195,32 @@ func New(queue []string) *Module {
 }
 
 // Executa a fase de rede de forma assíncrona, baixando os arquivos necessários
-func (m *Module) Download(wg *sync.WaitGroup) {
+func (m *Module) Download(includeBase bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	logger.LogStep("Iniciando fase de download do Gemco...")
 
 	var fila []downloader.DownloadItem
 
-	// Download da base do Gemco
-	fila = append(fila, downloader.DownloadItem{
-		URL:         BaseURL,
-		Destination: filepath.Join(m.TempDir, BaseZipName),
-		Label:       "Gemco Base",
-		ExpectedMB:  100.0,
-		MagicType:   "ZIP",
-	})
+	if includeBase {
+		// Download da base do Gemco
+		fila = append(fila, downloader.DownloadItem{
+			URL:         BaseURL,
+			Destination: filepath.Join(m.TempDir, BaseZipName),
+			Label:       "Gemco Base",
+			ExpectedMB:  100.0,
+			MagicType:   "ZIP",
+		})
 
-	// Download do ODBCM
-	fila = append(fila, downloader.DownloadItem{
-		URL:         OdbcmURL,
-		Destination: filepath.Join(m.TempDir, OdbcmZipName),
-		Label:       "Utilitário ODBCM",
-		ExpectedMB:  0.3,
-		MagicType:   "ZIP",
-	})
-
+		// Download do ODBCM
+		fila = append(fila, downloader.DownloadItem{
+			URL:         OdbcmURL,
+			Destination: filepath.Join(m.TempDir, OdbcmZipName),
+			Label:       "Utilitário ODBCM",
+			ExpectedMB:  0.3,
+			MagicType:   "ZIP",
+		})
+	}
 	// Download da Fila de SPs/Customs
 	for _, item := range m.Queue {
 		if cat, exists := Catalog[item]; exists {
@@ -229,27 +241,33 @@ func (m *Module) Download(wg *sync.WaitGroup) {
 }
 
 // Executa a instalação de maneira sequencial
-func (m *Module) Install() error {
+func (m *Module) Install(includeBase bool) error {
 	logger.LogStep("Iniciando Fase de Instalação Sequencial (Gemco 2002)")
 
 	m.KillInstances()
 
-	if m.IsInstalled() {
-		logger.LogStep("Base existente detectada. Acionando Clean Nuke.")
-		m.CleanNuke()
-	}
+	if includeBase {
+		if m.IsInstalled() {
+			logger.LogStep("Base existente detectada. Acionando Clean Nuke.")
+			m.CleanNuke()
+		}
 
-	err := m.installBase()
-	if err != nil {
-		report.AddDeployReport("Gemco 2002", "Instalação Base", "Falha", err.Error())
-		return err
-	}
-	report.AddDeployReport("Gemco 2002", "Instalação Base", "Sucesso", "")
+		err := m.installBase()
+		if err != nil {
+			report.AddDeployReport("Gemco 2002", "Instalação Base", "Falha", err.Error())
+			return err
+		}
+		report.AddDeployReport("Gemco 2002", "Instalação Base", "Sucesso", "")
 
-	err = m.installODBCM()
-	if err != nil {
-		report.AddDeployReport("Gemco 2002", "Configuração ODBCM", "Falha", err.Error())
-		return err
+		err = m.installODBCM()
+		if err != nil {
+			report.AddDeployReport("Gemco 2002", "Configuração ODBCM", "Falha", err.Error())
+			return err
+		}
+	} else {
+		if !m.IsInstalled() {
+			logger.WriteLog("Gemco Base não detectada. A instalação isolada de SPs/Customs pode falhar.", "WARNING", logger.Yellow)
+		}
 	}
 
 	return m.installUpdates()
@@ -307,6 +325,9 @@ func (m *Module) CleanNuke() error {
 						// Erradica o Cache Oculto do InstallShield
 						installShieldPath := filepath.Join(os.Getenv("ProgramFiles(x86)"), "InstallShield Installation Information", sub)
 						os.RemoveAll(installShieldPath)
+
+						// Erradica a chave do Gemco no regedit
+						registry.DeleteKey(registry.LOCAL_MACHINE, upath+`\`+sub)
 					}
 				}
 			}
@@ -437,16 +458,6 @@ func (m *Module) installUpdates() error {
 				if cat.Type == "Custom" {
 					resquicioDll := filepath.Join(BaseDir, "ActiveX", "Custom", "DLL", "ccgstConsultaPedido.dll")
 					os.Remove(resquicioDll)
-				} else {
-					// Sendo SP, verifica a lógica da SP121
-					sp121Key := "Gemco2002SP44-00-121.exe"
-					sp121Cat := Catalog[sp121Key]
-					sp121Weight := getUpdateWeight(sp121Cat.RegValue)
-
-					if compareWeights(targetWeight, sp121Weight) > 0 {
-						logger.LogStep("DOWNGRADE de SP: Re-aplicando dependência Base 121 silenciosamente...")
-						executor.RunSilent(filepath.Join(m.TempDir, sp121Key), "/silent")
-					}
 				}
 			}
 		}
@@ -464,6 +475,14 @@ func (m *Module) installUpdates() error {
 		if err != nil || (exitCode != 0 && exitCode != 3010) {
 			report.AddDeployReport("Gemco 2002", item, "Falha", fmt.Sprintf("ExitCode: %d", exitCode))
 			logger.WriteLog(fmt.Sprintf("Falha ao instalar %s (ExitCode %d): %v", item, exitCode, err), "ERROR", logger.Red)
+			continue
+		}
+
+		// Validação pós-instalação: Verifica se o valor do registro foi atualizado corretamente
+		newVal := m.getInstalledVersion(cat.RegKey)
+		if newVal != cat.RegValue {
+			report.AddDeployReport("Gemco 2002", item, "Falha", fmt.Sprintf("Registro não atualizado: %s", newVal))
+			logger.WriteLog(fmt.Sprintf("Falha na validação pós-instalação de %s: Registro não atualizado (Esperado: %s, Atual: %s)", item, cat.RegValue, newVal), "ERROR", logger.Red)
 			continue
 		}
 
