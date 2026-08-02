@@ -140,6 +140,7 @@ func (w *WpsManager) Deploy(forceReinstall bool) error {
 	if err != nil {
 		logger.WriteLog(fmt.Errorf("Falha no download do WPS Office: %w", err).Error(), "ERROR", logger.Red)
 		report.AddDeployReport("WPS Office", "Download", "FALHA", fmt.Sprintf("Erro: %v", err))
+		return err
 	}
 
 	// Fase 2: Instalação (Sequencial)
