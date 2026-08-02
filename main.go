@@ -25,7 +25,7 @@ var assets embed.FS
 
 func main() {
 
-	logger.InitLogger("C:\\TI_Setup_Temp\\deployment_tool.txt")
+	logger.InitLogger("C:\\TI_Setup_Temp")
 	scannerMenu := bufio.NewScanner(os.Stdin)
 
 	// Loop infinito iterativo para múltiplos testes sem derrubar o processo
