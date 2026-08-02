@@ -287,11 +287,47 @@ func (m *Module) IsInstalled() bool {
 
 // Derruba processos conflitantes
 func (m *Module) KillInstances() {
-	procs := []string{"gemco.exe", "gconfig.exe", "odbcm.exe"}
-	for _, p := range procs {
-		cmd := exec.Command("taskkill", "/F", "/IM", p, "/T")
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		cmd.Run()
+	// Obtém a lista de processos em execução no Windows via tasklist
+	cmd := exec.Command("tasklist", "/FO", "CSV", "/NH")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	output, err := cmd.Output()
+	if err != nil {
+		return
+	}
+
+	// Compila a expressão regular (Case Insensitive)
+	// Captura qualquer processo que contenha "gemco" e termine com .exe
+	reGemco := regexp.MustCompile(`(?i).*gemco.*\.exe`)
+
+	// Map como "Set" para extrair apenas nomes únicos
+	targets := make(map[string]bool)
+
+	// Adiciona o gconfig manualmente pois ele pertence ao escopo, mas não tem "gemco" no nome
+	targets["gconfig.exe"] = true
+
+	// Analisa o retorno do CSV em memória
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		parts := strings.Split(line, ",")
+		if len(parts) > 0 {
+			// Remove as aspas e espaços invisíveis oriundos do formato CSV
+			procName := strings.Trim(strings.TrimSpace(parts[0]), `"`)
+			if reGemco.MatchString(procName) {
+				targets[procName] = true
+			}
+		}
+	}
+
+	// Executa o extermínio para os alvos filtrados
+	for p := range targets {
+		// Regra estrita de exclusão: Garante que o ODBCM fique fora do abate
+		if strings.ToLower(p) == "odbcm.exe" {
+			continue
+		}
+
+		killCmd := exec.Command("taskkill", "/F", "/IM", p, "/T")
+		killCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		killCmd.Run()
 	}
 }
 
