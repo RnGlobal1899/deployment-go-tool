@@ -12,6 +12,7 @@ import (
 	"grc-deploy/core/modules/kaspersky"
 	"grc-deploy/core/modules/kaspersky/endpointsecurity"
 	"grc-deploy/core/modules/kaspersky/networkagent"
+	"grc-deploy/core/modules/ocs"
 	"grc-deploy/core/modules/wps"
 	"grc-deploy/core/report"
 
@@ -35,7 +36,7 @@ func main() {
 		fmt.Println("============================================================")
 		fmt.Println("  1) Kaspersky Manager (Endpoint & Network Agent)")
 		fmt.Println("  2) WPS Office")
-		fmt.Println("  3) OCS Inventory Agent (Futuro)")
+		fmt.Println("  3) OCS Inventory Agent")
 		fmt.Println("  0) Sair do Loop CLI (Prosseguir para UI ou Encerrar)")
 		fmt.Print("  Escolha uma opção: ")
 
@@ -185,7 +186,37 @@ func main() {
 			}
 
 		case "3":
-			logger.LogWarning("Módulo OCS Inventory ainda não implementado. (Próxima etapa!)")
+			// --- MÓDULO OCS INVENTORY AGENT ---
+			fmt.Println("\n--- MENU DE SELEÇÃO OCS INVENTORY ---")
+			ocsManager := ocs.NewOcsManager()
+
+			if ocsManager.CheckInstalled() {
+				logger.LogWarning("O OCS Agent já está instalado nesta máquina.")
+				fmt.Println("  1) Forçar Reinstalação (Modo Interativo)")
+				fmt.Println("  0) Voltar ao menu principal")
+				fmt.Print("Escolha uma opção: ")
+
+				scannerMenu.Scan()
+				optOcs := strings.TrimSpace(scannerMenu.Text())
+
+				if optOcs == "1" {
+					ocsManager.Deploy(true)
+				} else {
+					logger.WriteLog("Operação cancelada pelo usuário.", "INFO", logger.Cyan)
+				}
+			} else {
+				logger.LogStep("OCS Agent NÃO detectado.")
+				fmt.Println("  1) Iniciar Deploy (Download -> Execução Manual com GUI)")
+				fmt.Println("  0) Voltar ao menu principal")
+				fmt.Print("Escolha uma opção: ")
+
+				scannerMenu.Scan()
+				optOcs := strings.TrimSpace(scannerMenu.Text())
+
+				if optOcs == "1" {
+					ocsManager.Deploy(false)
+				}
+			}
 
 		default:
 			logger.WriteLog("Opção inválida.", "ERROR", logger.Red)
