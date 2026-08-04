@@ -1,12 +1,101 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8"/>
-    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-    <title>grc-deploy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>GRC Deploy - Management Tool</title>
+    <link rel="stylesheet" href="./src/style.css">
 </head>
-<body>
-<div id="app"></div>
-<script src="./src/main.ts" type="module"></script>
-</body>
+<body class="h-screen w-screen flex flex-col bg-slate-950 text-slate-200 font-sans">
+
+    <!-- CONTAINER SUPERIOR (Sidebar + Conteúdo) -->
+    <div class="flex flex-1 overflow-hidden">
+        
+        <!-- SIDEBAR -->
+        <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shadow-2xl z-10">
+            <!-- Logo Area -->
+            <div class="p-6 border-b border-slate-800 flex items-center space-x-3">
+                <img id="logo" class="w-8 h-8" src="./src/assets/images/logo-universal.png" alt="logo"/>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-100 tracking-wider">GRC<span class="text-cyan-500">DEPLOY</span></h1>
+                    <p class="text-xs text-slate-500 font-mono">v1.2.0-core</p>
+                </div>
+            </div>
+
+            <!-- Menu de Navegação -->
+            <nav class="flex-1 p-4 space-y-2" id="sidebar-nav">
+                <!-- Botão Ativo (Exemplo: Dashboard) -->
+                <button class="w-full flex items-center space-x-3 px-4 py-3 bg-slate-800 text-cyan-400 border border-slate-700 rounded-lg shadow-inner transition-all">
+                    <!-- Ícone SVG inline (Lucide Grid) -->
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                    <span class="font-semibold tracking-wide text-sm">Dashboard</span>
+                </button>
+
+                <!-- Botão Inativo (Exemplo: Módulos) -->
+                <button class="w-full flex items-center space-x-3 px-4 py-3 bg-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg transition-all duration-200 ease-in-out hover:-translate-y-0.5">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                    <span class="font-semibold tracking-wide text-sm">Módulos Isolados</span>
+                </button>
+            </nav>
+        </aside>
+
+        <!-- ÁREA PRINCIPAL DE CONTEÚDO -->
+        <main class="flex-1 bg-slate-950 p-8 overflow-y-auto relative" id="main-content">
+            <!-- Título da View -->
+            <header class="mb-8">
+                <h2 class="text-2xl font-bold text-slate-100">Visão Geral</h2>
+                <p class="text-sm text-slate-400 mt-1">Selecione uma esteira de automação ou inicie componentes individualmente.</p>
+            </header>
+
+            <!-- AQUI ENTRARÃO OS CARDS DE SOFTWARE (Injetados via TS depois) -->
+            <div id="view-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Placeholder visual para entendermos o espaço -->
+                <div class="h-48 border border-slate-800 border-dashed rounded-xl flex items-center justify-center text-slate-600 font-mono text-sm">
+                    [ ÁREA DE CARDS DINÂMICOS ]
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- TERMINAL / CONSOLE INFERIOR -->
+    <footer class="h-48 bg-[#05080f] border-t border-slate-800 flex flex-col z-20">
+        <!-- Barra de título do terminal -->
+        <div class="px-4 py-2 bg-slate-900 border-b border-slate-800 flex justify-between items-center select-none">
+            <span class="text-xs font-mono text-slate-500 uppercase flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span>Console de Operações</span>
+            </span>
+            <button class="text-slate-500 hover:text-slate-300 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+        </div>
+        <!-- Área de logs rolável -->
+        <div id="terminal-output" class="flex-1 p-4 font-mono text-sm text-slate-400 overflow-y-auto space-y-1">
+            <div class="flex items-start space-x-3 text-cyan-500">
+                <span class="text-slate-600">[19:20:08]</span>
+                <span>[INFO] GRC Deploy Interface inicializada. Aguardando comandos...</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Template Dinâmico: SoftwareCard (Dark Tech Corporativo) -->
+    <template id="software-card-template">
+      <div class="software-card flex flex-col p-5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg active:translate-y-0 active:shadow-inner">
+        <div class="flex items-center space-x-4 mb-3">
+          <div class="card-icon-container w-12 h-12 flex items-center justify-center rounded-lg bg-slate-800/50 transition-colors duration-300">
+            <!-- O SVG será injetado dinamicamente via TypeScript -->
+          </div>
+          <h3 class="card-title text-lg font-bold text-slate-200"></h3>
+        </div>
+        <p class="card-description text-sm text-slate-400 flex-grow"></p>
+        
+        <!-- Área de Ações/Status (Opcional, pronta para expandir) -->
+        <div class="mt-4 flex justify-end card-actions">
+          <span class="card-status text-xs font-medium px-2 py-1 rounded border border-slate-700 bg-slate-800 text-slate-500 opacity-0 transition-opacity duration-300"></span>
+        </div>
+      </div>
+    </template>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>

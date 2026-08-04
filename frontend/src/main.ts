@@ -1,49 +1,37 @@
 import './style.css';
-import './app.css';
 
-import logo from './assets/images/logo-universal.png';
-import {Greet} from '../wailsjs/go/main/App';
+// Variáveis globais para manipular o DOM
+const terminalOutput = document.getElementById('terminal-output') as HTMLDivElement;
 
-// Setup the greet function
-window.greet = function () {
-    // Get name
-    let name = nameElement!.value;
-
-    // Check if the input is empty
-    if (name === "") return;
-
-    // Call App.Greet(name)
-    try {
-        Greet(name)
-            .then((result) => {
-                // Update result with data back from App.Greet()
-                resultElement!.innerText = result;
-            })
-            .catch((err) => {
-                console.error(err);
-            });
-    } catch (err) {
-        console.error(err);
+/**
+ * Utilitário provisório para escrever no console inferior da interface
+ */
+export function logToTerminal(message: string, level: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR' = 'INFO') {
+    const now = new Date();
+    const timeString = now.toTimeString().split(' ')[0]; // Ex: 14:35:00
+    
+    let colorClass = 'text-slate-400';
+    switch (level) {
+        case 'SUCCESS': colorClass = 'text-green-400'; break;
+        case 'WARNING': colorClass = 'text-amber-400'; break;
+        case 'ERROR':   colorClass = 'text-red-500'; break;
+        case 'INFO':    colorClass = 'text-cyan-500'; break;
     }
-};
 
-document.querySelector('#app')!.innerHTML = `
-    <img id="logo" class="logo">
-      <div class="result" id="result">Please enter your name below 👇</div>
-      <div class="input-box" id="input">
-        <input class="input" id="name" type="text" autocomplete="off" />
-        <button class="btn" onclick="greet()">Greet</button>
-      </div>
-    </div>
-`;
-(document.getElementById('logo') as HTMLImageElement).src = logo;
+    const logEntry = document.createElement('div');
+    logEntry.className = `flex items-start space-x-3 ${colorClass}`;
+    logEntry.innerHTML = `
+        <span class="text-slate-600">[${timeString}]</span>
+        <span>[${level}] ${message}</span>
+    `;
 
-let nameElement = (document.getElementById("name") as HTMLInputElement);
-nameElement.focus();
-let resultElement = document.getElementById("result");
-
-declare global {
-    interface Window {
-        greet: () => void;
-    }
+    terminalOutput.appendChild(logEntry);
+    
+    // Rola o terminal automaticamente para o fundo
+    terminalOutput.scrollTop = terminalOutput.scrollHeight;
 }
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', () => {
+    logToTerminal('DOM Carregado. Construindo UI Dark Tech...', 'INFO');
+});
