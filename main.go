@@ -5,10 +5,12 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
 	"grc-deploy/core/logger"
+	"grc-deploy/core/modules/gemcofinanceiro"
 	"grc-deploy/core/modules/kaspersky"
 	"grc-deploy/core/modules/kaspersky/endpointsecurity"
 	"grc-deploy/core/modules/kaspersky/networkagent"
@@ -37,6 +39,7 @@ func main() {
 		fmt.Println("  1) Kaspersky Manager (Endpoint & Network Agent)")
 		fmt.Println("  2) WPS Office")
 		fmt.Println("  3) OCS Inventory Agent")
+		fmt.Println("  4) Gemco Financeiro")
 		fmt.Println("  0) Sair do Loop CLI (Prosseguir para UI ou Encerrar)")
 		fmt.Print("  Escolha uma opção: ")
 
@@ -218,6 +221,104 @@ func main() {
 				}
 			}
 
+		case "4":
+			// --- MÓDULO GEMCO FINANCEIRO ---
+			fmt.Println("\n--- MENU DE SELEÇÃO GEMCO FINANCEIRO ---")
+			gfBaseMock := gemcofinanceiro.New(nil)
+			isGfInstalled := gfBaseMock.IsInstalled()
+
+			if isGfInstalled {
+				logger.LogWarning("A base do Gemco Financeiro já está instalada nesta máquina.")
+				fmt.Println("  1) Desinstalar (Clean Nuke Extremo Direcionado)")
+				fmt.Println("  2) Instalar apenas SP/Custom (Atualização Isolada)")
+				fmt.Println("  3) Reinstalar Completo (Nuke -> Base -> SP/Custom)")
+				fmt.Println("  0) Voltar ao menu principal")
+			} else {
+				logger.LogStep("Base do Gemco Financeiro NÃO detectada.")
+				fmt.Println("  1) Instalar apenas a BASE (Pacote_v11)")
+				fmt.Println("  2) Instalar BASE + SP/Custom (Sequência Completa)")
+				fmt.Println("  0) Voltar ao menu principal")
+			}
+			fmt.Print("Escolha uma opção: ")
+
+			scannerMenu.Scan()
+			optGf := strings.TrimSpace(scannerMenu.Text())
+
+			if optGf == "0" || optGf == "" {
+				continue
+			}
+
+			// Função auxiliar isolada para renderizar catálogo na CLI e coletar a fila via índices
+			buildGfQueue := func() []string {
+				var keys []string
+				for k := range gemcofinanceiro.Catalog {
+					keys = append(keys, k)
+				}
+				fmt.Println("\n  [CATÁLOGO DISPONÍVEL - GEMCO FINANCEIRO]")
+				for i, k := range keys {
+					fmt.Printf("   [%d] %s\n", i, k)
+				}
+				fmt.Print("  Digite os números desejados separados por vírgula (ex: 0,2) ou Enter para pular: ")
+				scannerMenu.Scan()
+				input := strings.TrimSpace(scannerMenu.Text())
+				var queue []string
+				if input != "" {
+					parts := strings.Split(input, ",")
+					for _, p := range parts {
+						idx, err := strconv.Atoi(strings.TrimSpace(p))
+						if err == nil && idx >= 0 && idx < len(keys) {
+							queue = append(queue, keys[idx])
+						}
+					}
+				}
+				return queue
+			}
+
+			if isGfInstalled {
+				switch optGf {
+				case "1":
+					gfBaseMock.CleanNuke()
+					logger.WriteLog("Gemco Financeiro desinstalado com sucesso.", "SUCCESS", logger.Green)
+				case "2":
+					q := buildGfQueue()
+					mod := gemcofinanceiro.New(q)
+					var wg sync.WaitGroup
+					wg.Add(1)
+					go mod.Download(false, &wg)
+					wg.Wait()
+					mod.Install(false)
+				case "3":
+					q := buildGfQueue()
+					mod := gemcofinanceiro.New(q)
+					var wg sync.WaitGroup
+					wg.Add(1)
+					go mod.Download(true, &wg)
+					wg.Wait()
+					mod.Install(true)
+				default:
+					logger.WriteLog("Opção inválida.", "ERROR", logger.Red)
+				}
+			} else {
+				switch optGf {
+				case "1":
+					mod := gemcofinanceiro.New(nil)
+					var wg sync.WaitGroup
+					wg.Add(1)
+					go mod.Download(true, &wg)
+					wg.Wait()
+					mod.Install(true)
+				case "2":
+					q := buildGfQueue()
+					mod := gemcofinanceiro.New(q)
+					var wg sync.WaitGroup
+					wg.Add(1)
+					go mod.Download(true, &wg)
+					wg.Wait()
+					mod.Install(true)
+				default:
+					logger.WriteLog("Opção inválida.", "ERROR", logger.Red)
+				}
+			}
 		default:
 			logger.WriteLog("Opção inválida.", "ERROR", logger.Red)
 		}
