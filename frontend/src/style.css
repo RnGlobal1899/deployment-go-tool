@@ -1,11 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer base {
-  body {
-    @apply bg-slate-950 text-slate-200 font-sans antialiased overflow-hidden select-none;
-  }
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  user-select: none;
 }
 
 /* Customiza a Scrollbar no estilo Terminal/Dark */

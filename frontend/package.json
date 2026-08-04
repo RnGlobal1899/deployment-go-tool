@@ -2,13 +2,21 @@
   "name": "frontend",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.5.25",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.6.3",
     "vite": "^7.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
   }
 }
