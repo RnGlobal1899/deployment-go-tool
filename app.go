@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 
+	"grc-deploy/core/logger"
 	"grc-deploy/core/modules"
 	"grc-deploy/core/modules/gemcofinanceiro"
 	"grc-deploy/core/modules/kaspersky"
@@ -22,6 +23,7 @@ func NewApp() *App {
 // startup é chamado pelo Wails logo na inicialização
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	logger.SetContext(ctx) // Acopla o motor de logs ao channel de eventos do Wails para comunicação com o frontend
 }
 
 // Estrutura de dados para transitar do Go para o Wails/TS
@@ -53,4 +55,28 @@ func (a *App) GetSoftwareModules() []UIModule {
 	}
 
 	return uiList
+}
+
+// Recebe o ID do card
+func (a *App) InstallSoftware(id string) {
+	activeModules := []modules.GRCModule{
+		kaspersky.NewKasperskyManager(),
+		wps.NewWpsManager(),
+		gemcofinanceiro.New([]string{}),
+	}
+
+	for _, mod := range activeModules {
+		if mod.GetID() == id {
+			go func(m modules.GRCModule) {
+				logger.LogStep("Solicitação de instalação para: " + m.GetName())
+				err := m.RunSilent()
+				if err != nil {
+					logger.WriteLog("Erro ao instalar: "+m.GetName()+": "+err.Error(), "ERROR", logger.Red)
+				} else {
+					logger.LogSuccess(m.GetName() + " instalado com sucesso.")
+				}
+			}(mod)
+			break
+		}
+	}
 }

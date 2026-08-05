@@ -1,14 +1,23 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 var logMu sync.Mutex
+var wailsCtx context.Context
+
+// Injeta o contexto do Wails para permitir a comunicação com o frontend
+func SetContext(ctx context.Context) {
+	wailsCtx = ctx
+}
 
 // Códigos ANSI para colorir o console
 const (
@@ -65,4 +74,10 @@ func WriteLog(msg, level, colorCode string) {
 	defer f.Close() // Garante que o arquivo será fechado após a escrita
 
 	f.WriteString(logLine)
+
+	// Envia o log para o frontend via Wails
+	if wailsCtx != nil {
+		// Emite o evento "terminal-log" para o frontend com a mensagem de log e a cor
+		runtime.EventsEmit(wailsCtx, "terminal-log", logLine, colorCode)
+	}
 }
