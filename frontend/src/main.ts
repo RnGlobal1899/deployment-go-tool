@@ -33,6 +33,7 @@ export function logToTerminal(message: string, level: 'INFO' | 'SUCCESS' | 'WARN
 
 import { SoftwareCard } from './components/SoftwareCard';
 import { GetSoftwareModules } from '../wailsjs/go/main/App';
+import { EventsOn } from '../wailsjs/runtime/runtime';
 
 // Motor de Injeção no DOM via API-First (Consumindo do Go)
 async function initDashboard() {
@@ -60,10 +61,32 @@ async function initDashboard() {
     }
 }
 
-// 3. Orquestração de Boot do Frontend
+// 3. Orquestração de Boot do Frontend 
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializa a UI dinâmica
     initDashboard();
+
+    // Escuta o listener de eventos do backend para logs em tempo real
+    EventsOn('terminal-log', (logLine: string, colorCode: string) => {
+        const cleanLine = logLine.trimEnd();
+
+        // Mapeia o colorCode do backend para classes Tailwind
+        let colorClass = 'text-slate-400';
+        if (colorCode.includes('31m')) colorClass = 'text-red-500';
+        if (colorCode.includes('32m')) colorClass = 'text-green-400';
+        if (colorCode.includes('33m')) colorClass = 'text-amber-400';
+        if (colorCode.includes('36m')) colorClass = 'text-cyan-500';
+
+        const logEntry = document.createElement('div');
+        logEntry.className = `font-mono text-sm ${colorClass}`;
+        logEntry.textContent = cleanLine;
+
+        terminalOutput.appendChild(logEntry);
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    });
+
+    logToTerminal('Híbrido Go + Wails carregado. Iniciando UI Dark Tech...', 'INFO');
+
 });
 
 // Inicialização

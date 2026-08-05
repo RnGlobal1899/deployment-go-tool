@@ -3,3 +3,5 @@
 import {main} from '../models';
 
 export function GetSoftwareModules():Promise<Array<main.UIModule>>;
+
+export function InstallSoftware(arg1:string):Promise<void>;

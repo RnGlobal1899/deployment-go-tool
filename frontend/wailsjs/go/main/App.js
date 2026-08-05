@@ -5,3 +5,7 @@
 export function GetSoftwareModules() {
   return window['go']['main']['App']['GetSoftwareModules']();
 }
+
+export function InstallSoftware(arg1) {
+  return window['go']['main']['App']['InstallSoftware'](arg1);
+}

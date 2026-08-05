@@ -1,3 +1,5 @@
+import { InstallSoftware } from '../../wailsjs/go/main/App';
+
 export interface SoftwareModule {
     id: string;
     name: string;
@@ -35,7 +37,36 @@ export class SoftwareCard {
 
         // Executa o motor dinâmico de Cores e Relevo
         this.applyDynamicAccent(data.name, iconContainer);
+
+        // Injeta o Event listener de clique para disparar a instalação do software
+        this.element.addEventListener('click', async () => {
+            const statusSpan = this.element.querySelector('.card-status') as HTMLElement;
+            
+            if (statusSpan) {
+                statusSpan.textContent = 'Enviando...';
+                statusSpan.classList.remove('opacity-0');
+                statusSpan.classList.add('opacity-100', 'animate-pulse');
+            }
+            
+            try {
+                // Invoca o método Go de forma assíncrona. O Go cuidará das Goroutines de rede 
+                // e do Mutex de instalação Sequencial. A interface permanece 100% responsiva.
+                await InstallSoftware(data.id);
+            } catch (error) {
+                console.error(`[IPC Error] Falha ao disparar módulo ${data.id}:`, error);
+            } finally {
+                if (statusSpan) {
+                    statusSpan.classList.remove('animate-pulse');
+                    statusSpan.textContent = 'Processando no Backend';
+                    // Aguarda 3 segundos e oculta a flag suavemente (Dark Tech style)
+                    setTimeout(() => {
+                        statusSpan.classList.replace('opacity-100', 'opacity-0');
+                    }, 3000);
+                }
+            }
+        });
     }
+
 
     /**
      * Motor de Accent Colors: Injeta tipografia e sombra interativa
