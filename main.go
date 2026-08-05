@@ -4,6 +4,8 @@ import (
 	"embed"
 	"log"
 
+	"grc-deploy/core/logger"
+
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -13,6 +15,9 @@ import (
 var assets embed.FS
 
 func main() {
+	// Inicializa o motor de logs
+	logger.InitLogger(`C:\TI_Setup_Temp`) // Define o diretório temporário para armazenar os logs
+
 	// Cria uma instância da estrutura App (que reside no app.go)
 	app := NewApp()
 

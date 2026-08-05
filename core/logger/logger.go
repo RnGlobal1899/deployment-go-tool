@@ -40,17 +40,17 @@ func InitLogger(TempFolder string) {
 
 // Função para escrever os passos
 func LogStep(msg string) {
-	fmt.Printf("\n >> %s%s%s\n", Cyan, msg, Reset)
+	WriteLog(">> "+msg, "INFO", Cyan)
 }
 
 // Função para escrever sucesso
 func LogSuccess(msg string) {
-	fmt.Printf(" [OK] >> %s%s%s\n", Green, msg, Reset)
+	WriteLog("[OK] >> "+msg, "SUCCESS", Green)
 }
 
 // Função para escrever aviso
 func LogWarning(msg string) {
-	fmt.Printf(" [!] >> %s%s%s\n", Yellow, msg, Reset)
+	WriteLog("[!] >> "+msg, "WARNING", Yellow)
 }
 
 // WriteLog grava no arquivo de texto e imprime no console simultaneamente
