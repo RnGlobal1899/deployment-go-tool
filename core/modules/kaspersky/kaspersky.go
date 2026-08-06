@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"grc-deploy/core/modules/kaspersky/endpointsecurity"
 	"grc-deploy/core/modules/kaspersky/networkagent"
+	"os"
+	"os/exec"
+	"strings"
 	"sync"
 
 	"grc-deploy/core/logger"
@@ -60,6 +63,81 @@ func (k *KasperskyManager) DeployKasperskyModules(serverIP, activationcode strin
 
 	logger.LogStep("Kaspersky Manager finalizado com sucesso.")
 	return nil
+}
+
+// Executa validações avançadas (Serviço do Windows + Múltiplos Paths)
+func (k *KasperskyManager) CheckStatus(component string) bool {
+	if component == "agent" {
+		// 1. Verificação de Serviço Ativo
+		cmd := exec.Command("cmd", "/C", "sc query klnagent")
+		out, err := cmd.CombinedOutput()
+		if err == nil && (strings.Contains(string(out), "RUNNING") || strings.Contains(string(out), "STOPPED")) {
+			return true
+		}
+
+		// 2. Verificação de Paths (Fallbacks)
+		paths := []string{
+			`C:\Program Files (x86)\Kaspersky Lab\NetworkAgent\klnagent.exe`,
+			`C:\Program Files\Kaspersky Lab\NetworkAgent\klnagent.exe`,
+		}
+		for _, p := range paths {
+			if _, err := os.Stat(p); err == nil {
+				return true
+			}
+		}
+	} else if component == "endpoint" {
+		// 1. Verificação de Serviço Ativo
+		cmd := exec.Command("cmd", "/C", "sc query avp")
+		out, err := cmd.CombinedOutput()
+		if err == nil && (strings.Contains(string(out), "RUNNING") || strings.Contains(string(out), "STOPPED")) {
+			return true
+		}
+
+		// 2. Verificação de Paths (Adicionado variação da imagem)
+		paths := []string{
+			`C:\Program Files (x86)\Kaspersky Lab\Kaspersky Endpoint Security for Windows\avp.exe`,
+			`C:\Program Files (x86)\Kaspersky Lab\KES\avp.exe`,
+			`C:\Program Files\Kaspersky Lab\KES\avp.exe`,
+		}
+		for _, p := range paths {
+			if _, err := os.Stat(p); err == nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ExecuteWizard recebe a ordem do frontend e roteia para as funções corretas
+func (k *KasperskyManager) ExecuteWizard(agentAction, agentPayload, kesAction, kesPayload string) {
+	logger.LogStep("Iniciando Esteira Kaspersky (Modo Avançado)...")
+
+	if agentAction != "" && agentAction != "skip" {
+		logger.WriteLog(fmt.Sprintf("Executando no Agente: %s", agentAction), "INFO", logger.Cyan)
+		if agentAction == "repoint" {
+			k.RepointNetworkAgent(agentPayload)
+		} else if agentAction == "uninstall" {
+			k.UninstallNetworkAgent()
+		} else if agentAction == "install" || agentAction == "reinstall" {
+			if agentAction == "reinstall" {
+				k.UninstallNetworkAgent()
+			}
+			networkagent.InstallOrRepoint(agentPayload)
+		}
+	}
+
+	if kesAction != "" && kesAction != "skip" {
+		logger.WriteLog(fmt.Sprintf("Executando no Endpoint: %s", kesAction), "INFO", logger.Cyan)
+		if kesAction == "activate" {
+			endpointsecurity.InstallOrActivate(kesPayload)
+		} else if kesAction == "uninstall" {
+			// Credenciais default de KLAdmin - devem ser tratadas futuramente
+			k.UninstallEndpoint("", "")
+		} else if kesAction == "install" || kesAction == "reinstall" {
+			endpointsecurity.InstallOrActivate(kesPayload)
+		}
+	}
+	logger.LogSuccess("Processamento Kaspersky concluído com sucesso.")
 }
 
 // Funções exportadas para UI

@@ -80,3 +80,18 @@ func (a *App) InstallSoftware(id string) {
 		}
 	}
 }
+
+// Orquestra a validação do Kaspersky através do módulo isolado
+func (a *App) CheckKasperskyStatus(component string) bool {
+	km := kaspersky.NewKasperskyManager()
+	return km.CheckStatus(component)
+}
+
+// Orquestra o roteamento dos comandos via módulo isolado
+func (a *App) ExecuteKasperskyWizard(agentAction, agentPayload, kesAction, kesPayload string) {
+	// A Goroutine é obrigatória aqui para que a UI do Wails não congele aguardando o fim da instalação
+	go func() {
+		km := kaspersky.NewKasperskyManager()
+		km.ExecuteWizard(agentAction, agentPayload, kesAction, kesPayload)
+	}()
+}
