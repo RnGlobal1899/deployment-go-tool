@@ -49,8 +49,16 @@ export class SoftwareCard {
             }
             
             try {
-                // Invoca o método Go de forma assíncrona. O Go cuidará das Goroutines de rede 
-                // e do Mutex de instalação Sequencial. A interface permanece 100% responsiva.
+                // Chama o Wizard do Kaspersky
+                if (data.id === 'kaspersky') {
+                    const { KasperskyWizard } = await import('./KasperskyWizard');
+                    const wizard = new KasperskyWizard();
+                    wizard.mount();
+
+                    if (statusSpan) statusSpan.classList.replace('opacity-100', 'opacity-0');
+                    return; // Interrompe a execução normal do InstallSoftware
+                }   
+                
                 await InstallSoftware(data.id);
             } catch (error) {
                 console.error(`[IPC Error] Falha ao disparar módulo ${data.id}:`, error);
