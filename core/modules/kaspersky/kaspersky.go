@@ -112,6 +112,29 @@ func (k *KasperskyManager) CheckStatus(component string) bool {
 func (k *KasperskyManager) ExecuteWizard(agentAction, agentPayload, kesAction, kesPayload string) {
 	logger.LogStep("Iniciando Esteira Kaspersky (Modo Avançado)...")
 
+	// Fase 1: Avaliação de Pré-requisitos e Download Isolado (Assíncrono)
+	var wg sync.WaitGroup
+	needsAgentDownload := agentAction == "install" || agentAction == "reinstall"
+	needsKesDownload := kesAction == "install" || kesAction == "reinstall"
+
+	if needsAgentDownload || needsKesDownload {
+		logger.LogStep("Fase de Preparação: Validando cache e baixando módulos necessários...")
+		if needsAgentDownload {
+			wg.Add(1)
+			go networkagent.DownloadAsync(&wg)
+		}
+		if needsKesDownload {
+			wg.Add(1)
+			go endpointsecurity.DownloadAsync(&wg)
+		}
+
+		// Obriga a goroutine principal a segurar o Mutex da instalação
+		// até que os binários estejam fisicamente no disco.
+		wg.Wait()
+		logger.LogStep("Fase de Preparação: Downloads validados.")
+	}
+
+	// Fase 2: Execução e Instalação Win32 (Sequencial)
 	if agentAction != "" && agentAction != "skip" {
 		logger.WriteLog(fmt.Sprintf("Executando no Agente: %s", agentAction), "INFO", logger.Cyan)
 		if agentAction == "repoint" {
