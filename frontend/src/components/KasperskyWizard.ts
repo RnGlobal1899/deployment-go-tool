@@ -71,17 +71,25 @@ export class KasperskyWizard {
         }
 
         if (this.step === 2) {
-            if (this.isAgentInstalled) {
-                const action = (this.content.querySelector('#agent-action') as HTMLSelectElement).value;
-                const ipInput = this.content.querySelector('#agent-ip') as HTMLInputElement;
-                
-                this.agentFinalAction = action;
-                this.agentFinalPayload = ipInput ? ipInput.value : "";
-            } else {
-                this.agentFinalAction = "install";
-            }
+            const action = (this.content.querySelector('#agent-action') as HTMLSelectElement).value;
+            const ipInput = this.content.querySelector('#agent-ip') as HTMLInputElement;
+            
+            this.agentFinalAction = action;
+            this.agentFinalPayload = ipInput ? ipInput.value : "";
 
             this.step = (this.targetMenu === 'agent') ? 4 : 3; // Vai pro fim se era só agente, senão vai pro endpoint
+            this.renderCurrentStep();
+            return;
+        }
+
+        if (this.step === 3) {
+            const action = (this.content.querySelector('#kes-action') as HTMLSelectElement).value;
+            const licInput = this.content.querySelector('#kes-license') as HTMLInputElement;
+            
+            this.kesFinalAction = action;
+            this.kesFinalPayload = licInput ? licInput.value : "";
+
+            this.step = 4;
             this.renderCurrentStep();
             return;
         }
@@ -132,73 +140,90 @@ export class KasperskyWizard {
 
     private renderStep2() {
         this.btnNext.textContent = "Avançar";
-        if (!this.isAgentInstalled) {
-            this.content.innerHTML = `<div class="text-emerald-400 font-medium">🛡️ Network Agent não detectado. Ele será listado para instalação limpa.</div>`;
-            return;
-        }
+
+        const statusBadge = this.isAgentInstalled 
+            ? `<div class="p-3 bg-slate-950 border border-slate-800 rounded-lg text-emerald-500 font-mono text-xs flex items-center space-x-2">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Network Agent Instalado</span>
+               </div>`
+            : `<div class="p-3 bg-slate-950 border border-slate-800 rounded-lg text-amber-500 font-mono text-xs flex items-center space-x-2">
+                  <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                  <span>Network Agent Ausente</span>
+               </div>`;
+
+        const options = this.isAgentInstalled
+            ? `<option value="skip">Seguir em Frente (Ignorar)</option>
+               <option value="repoint">Reapontar Agente</option>
+               <option value="reinstall">Reinstalar (Clean Install)</option>
+               <option value="uninstall">Apenas Desinstalar</option>`
+            : `<option value="install">Instalação Limpa</option>
+               <option value="skip">Ignorar Instalação</option>`;
 
         this.content.innerHTML = `
             <div class="space-y-4">
-                <div class="p-3 bg-slate-950 border border-slate-800 rounded-lg text-emerald-500 font-mono text-xs flex items-center space-x-2">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Network Agent Instalado</span>
-                </div>
-                
+                ${statusBadge}
                 <div class="space-y-2">
                     <label class="block text-slate-400 font-medium">Ação no Agente:</label>
                     <select id="agent-action" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-500 transition-colors">
-                        <option value="skip">Seguir em Frente (Ignorar)</option>
-                        <option value="repoint">Reapontar Agente</option>
-                        <option value="reinstall">Reinstalar (Clean Install)</option>
-                        <option value="uninstall">Apenas Desinstalar</option>
+                        ${options}
                     </select>
                 </div>
                 
-                <div id="agent-ip-container" class="hidden space-y-2 animate-fade-in-up">
+                <div id="agent-ip-container" class="space-y-2 animate-fade-in-up">
                     <label class="block text-slate-400 font-medium">Target IP (Administration Server):</label>
                     <input type="text" id="agent-ip" placeholder="Ex: 192.168.0.100" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-500 transition-colors" />
                 </div>
             </div>
         `;
 
-        // Lógica visual dinâmica baseada na necessidade
         const actionSelect = this.content.querySelector('#agent-action') as HTMLSelectElement;
         const ipContainer = this.content.querySelector('#agent-ip-container') as HTMLElement;
         
-        actionSelect.addEventListener('change', () => {
-            if (actionSelect.value === 'repoint' || actionSelect.value === 'reinstall') {
+        const toggleIP = () => {
+            if (actionSelect.value === 'repoint' || actionSelect.value === 'reinstall' || actionSelect.value === 'install') {
                 ipContainer.classList.remove('hidden');
             } else {
                 ipContainer.classList.add('hidden');
             }
-        });
+        };
+
+        toggleIP();
+        actionSelect.addEventListener('change', toggleIP);
     }
 
-    private renderStep3() {
+   private renderStep3() {
         this.btnNext.textContent = "Avançar";
-        if (!this.isEndpointInstalled) {
-            this.content.innerHTML = `<div class="text-emerald-400 font-medium">🛡️ Endpoint Security não detectado. Ele será listado para instalação limpa.</div>`;
-            return;
-        }
+
+        const statusBadge = this.isEndpointInstalled 
+            ? `<div class="p-3 bg-slate-950 border border-slate-800 rounded-lg text-emerald-500 font-mono text-xs flex items-center space-x-2">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Endpoint Security Instalado</span>
+               </div>`
+            : `<div class="p-3 bg-slate-950 border border-slate-800 rounded-lg text-amber-500 font-mono text-xs flex items-center space-x-2">
+                  <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                  <span>Endpoint Security Ausente</span>
+               </div>`;
+
+        const options = this.isEndpointInstalled
+            ? `<option value="skip">Seguir em Frente (Ignorar)</option>
+               <option value="activate">Ativar Licença via AVP</option>
+               <option value="reinstall">Reinstalar (Clean Install)</option>
+               <option value="uninstall">Desinstalar</option>`
+            : `<option value="install">Instalação Limpa</option>
+               <option value="skip">Ignorar Instalação</option>`;
 
         this.content.innerHTML = `
             <div class="space-y-4">
-                <div class="p-3 bg-slate-950 border border-slate-800 rounded-lg text-emerald-500 font-mono text-xs flex items-center space-x-2">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span>Endpoint Security Instalado</span>
-                </div>
-                
+                ${statusBadge}
                 <div class="space-y-2">
                     <label class="block text-slate-400 font-medium">Ação no Endpoint:</label>
                     <select id="kes-action" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-500 transition-colors">
-                        <option value="skip">Seguir em Frente (Ignorar)</option>
-                        <option value="activate">Ativar Licença via AVP</option>
-                        <option value="uninstall">Desinstalar</option>
+                        ${options}
                     </select>
                 </div>
                 
-                <div id="kes-lic-container" class="hidden space-y-2 animate-fade-in-up">
-                    <label class="block text-slate-400 font-medium">Licença Corporativa:</label>
+                <div id="kes-lic-container" class="space-y-2 animate-fade-in-up">
+                    <label class="block text-slate-400 font-medium">Licença Corporativa (Opcional):</label>
                     <input type="text" id="kes-license" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-lg p-2.5 outline-none focus:border-emerald-500 transition-colors font-mono uppercase" />
                 </div>
             </div>
@@ -207,13 +232,16 @@ export class KasperskyWizard {
         const actionSelect = this.content.querySelector('#kes-action') as HTMLSelectElement;
         const licContainer = this.content.querySelector('#kes-lic-container') as HTMLElement;
         
-        actionSelect.addEventListener('change', () => {
-            if (actionSelect.value === 'activate') {
+        const toggleLic = () => {
+            if (actionSelect.value === 'activate' || actionSelect.value === 'install' || actionSelect.value === 'reinstall') {
                 licContainer.classList.remove('hidden');
             } else {
                 licContainer.classList.add('hidden');
             }
-        });
+        };
+
+        toggleLic(); // Força estado inicial correto
+        actionSelect.addEventListener('change', toggleLic);
     }
 
     private renderStep4() {
