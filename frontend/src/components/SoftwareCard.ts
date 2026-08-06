@@ -57,7 +57,14 @@ export class SoftwareCard {
 
                     if (statusSpan) statusSpan.classList.replace('opacity-100', 'opacity-0');
                     return; // Interrompe a execução normal do InstallSoftware
-                }   
+                } else if (data.id === 'wps') {
+                    const { WpsWizard } = await import('./WpsWizard');
+                    const wizard = new WpsWizard();
+                    wizard.mount();
+
+                    if (statusSpan) statusSpan.classList.replace('opacity-100', 'opacity-0');
+                    return; // Interrompe a execução normal
+                }
                 
                 await InstallSoftware(data.id);
             } catch (error) {

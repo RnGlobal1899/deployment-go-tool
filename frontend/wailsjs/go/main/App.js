@@ -6,8 +6,16 @@ export function CheckKasperskyStatus(arg1) {
   return window['go']['main']['App']['CheckKasperskyStatus'](arg1);
 }
 
+export function CheckWpsStatus() {
+  return window['go']['main']['App']['CheckWpsStatus']();
+}
+
 export function ExecuteKasperskyWizard(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['ExecuteKasperskyWizard'](arg1, arg2, arg3, arg4);
+}
+
+export function ExecuteWpsWizard(arg1) {
+  return window['go']['main']['App']['ExecuteWpsWizard'](arg1);
 }
 
 export function GetSoftwareModules() {

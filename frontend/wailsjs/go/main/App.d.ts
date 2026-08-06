@@ -4,7 +4,11 @@ import {main} from '../models';
 
 export function CheckKasperskyStatus(arg1:string):Promise<boolean>;
 
+export function CheckWpsStatus():Promise<boolean>;
+
 export function ExecuteKasperskyWizard(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function ExecuteWpsWizard(arg1:string):Promise<void>;
 
 export function GetSoftwareModules():Promise<Array<main.UIModule>>;
 

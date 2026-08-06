@@ -95,3 +95,28 @@ func (a *App) ExecuteKasperskyWizard(agentAction, agentPayload, kesAction, kesPa
 		km.ExecuteWizard(agentAction, agentPayload, kesAction, kesPayload)
 	}()
 }
+
+// Orquestra a validação de presença do WPS Office no sistema
+func (a *App) CheckWpsStatus() bool {
+	wm := wps.NewWpsManager()
+	isInstalled, _ := wm.CheckInstalled()
+	return isInstalled
+}
+
+// Orquestra o roteamento das ações do WPS via módulo isolado
+func (a *App) ExecuteWpsWizard(action string) {
+	go func() {
+		wm := wps.NewWpsManager()
+		if action == "install" {
+			wm.Deploy(false) // Fase de rede + instalação
+		} else if action == "reinstall" {
+			wm.Deploy(true) // Força remoção + fase de rede + instalação
+		} else if action == "uninstall" {
+			// Busca o path do uninstaller dinamicamente
+			_, uninstPath := wm.CheckInstalled()
+			if uninstPath != "" {
+				wm.Uninstall(uninstPath)
+			}
+		}
+	}()
+}
