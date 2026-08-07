@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 
 	"grc-deploy/core/logger"
 	"grc-deploy/core/modules"
@@ -117,6 +118,41 @@ func (a *App) ExecuteWpsWizard(action string) {
 			if uninstPath != "" {
 				wm.Uninstall(uninstPath)
 			}
+		}
+	}()
+}
+
+// Orquestra a validação de presença da base do Gemco Financeiro
+func (a *App) CheckGemcoFinanceiroStatus() bool {
+	m := gemcofinanceiro.New([]string{})
+	return m.IsInstalled()
+}
+
+// Recupera as chaves do catálogo de atualizações dinamicamente
+func (a *App) GetGemcoFinanceiroCatalog() []string {
+	var keys []string
+	for k := range gemcofinanceiro.Catalog {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// Orquestra a execução da esteira do Gemco Financeiro
+func (a *App) ExecuteGemcoFinanceiroWizard(includeBase bool, queue []string, uninstallOnly bool) {
+	go func() {
+		m := gemcofinanceiro.New(queue)
+
+		if uninstallOnly {
+			m.KillInstances() // Derruba processos e trava thread se necessário
+			m.CleanNuke()     // Varredura de resíduos
+		} else {
+			// Barreira de concorrência: Aguarda downloads terminarem antes da instalação
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go m.Download(includeBase, &wg)
+			wg.Wait()
+
+			m.Install(includeBase)
 		}
 	}()
 }
